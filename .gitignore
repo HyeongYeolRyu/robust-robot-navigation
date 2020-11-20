@@ -8,6 +8,8 @@ target/
 .DS_Store
   
 *.class
+
+*.pyc
  
 # Package Files #
 *.jar
