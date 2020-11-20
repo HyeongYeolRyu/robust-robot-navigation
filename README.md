@@ -1,6 +1,17 @@
 # CS686 Term Project 
 ## Robust robot navigation against imperfect sensor data
 
+### Dependencies
+- python3
+- gym_gazebo: [link](https://github.com/erlerobot/gym-gazebo/blob/master/INSTALL.md#ubuntu-1804)
+- tensorflow-1.14
+
+
+- defusedxml
+```
+$ pip install defusedxml
+```
+
 ### Installation
 ```
 $ cd YOUR_WS
@@ -10,9 +21,9 @@ $ cd ..
 $ catkin_make
 ```
 
-Add following code in ~/.bashrc
+Add target robot to ~/.bashrc
 ```
-$ export TURTLEBOT3_MODEL=burger
+$ echo 'export TURTLEBOT3_MODEL=burger' >> ~/.bashrc
 ```
 
 Please refer to the following repo & install
