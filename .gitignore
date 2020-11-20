@@ -1,0 +1,34 @@
+# Directories #
+/build/
+/bin/
+target/
+/devel/
+ 
+# OS Files #
+.DS_Store
+  
+*.class
+ 
+# Package Files #
+*.jar
+*.war
+*.ear
+*.db
+      
+# Eclipse #
+.project
+.metadata
+.classpath
+.settings/
+.loadpath
+
+# Vscode #
+.vscode/
+ 
+bin/**
+tmp/**
+tmp/**/*
+*.tmp
+*.bak
+local.properties
+/src/main/resources/rebel.xml
