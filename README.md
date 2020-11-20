@@ -19,7 +19,7 @@ Please refer to the following repo & install
 
 https://github.com/srl-freiburg/pedsim_ros
 
-Once install it, follow the usages of 'pedsim_gazebo_plugin package'
+Once install it, follow the usages of 'pedsim_gazebo_plugin' package
 
 
 
