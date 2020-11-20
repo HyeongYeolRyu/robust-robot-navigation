@@ -10,7 +10,9 @@ target/
 *.class
 
 *.pyc
- 
+
+.idea/
+
 # Package Files #
 *.jar
 *.war
