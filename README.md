@@ -9,15 +9,20 @@ $ git clone https://github.com/HyeongYeolRyu/robust-robot-navigation.git
 $ cd ..
 $ catkin_make
 ```
-Please refer to the following repo & install, too.
-
-https://github.com/srl-freiburg/pedsim_ros
-
 
 Add following code in ~/.bashrc
 ```
 $ export TURTLEBOT3_MODEL=burger
 ```
+
+Please refer to the following repo & install
+
+https://github.com/srl-freiburg/pedsim_ros
+
+Once install it, follow the usages of 'pedsim_gazebo_plugin package'
+
+
+
 
 ### How to run?
 
