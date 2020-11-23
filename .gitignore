@@ -3,7 +3,9 @@
 /bin/
 target/
 /devel/
- 
+src/spinningup/log/
+.catkin_workspace
+
 # OS Files #
 .DS_Store
   
