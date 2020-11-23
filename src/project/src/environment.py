@@ -52,6 +52,7 @@ class Env:
         self.stack_size = 100
         self.stacked_scan_obs = np.full((self.stack_size, self.sensor_dim), self.sensor_range)
         self.robot_position = PoseStamped()
+        self.pitch = 0.
 
         # Input state
         self.past_distance = 0.
@@ -108,6 +109,7 @@ class Env:
         orientation = odom.pose.pose.orientation
         q_x, q_y, q_z, q_w = orientation.x, orientation.y, orientation.z, orientation.w
         yaw = round(math.degrees(math.atan2(2 * (q_x * q_y + q_w * q_z), 1 - 2 * (q_y * q_y + q_z * q_z))))
+        self.pitch = round(math.degrees(math.atan2((2 * q_x * q_w) - (2 * q_y * q_z), 1 - (2 * q_x*q_x + 2 * q_z*q_z))))
 
         if yaw >= 0:
             yaw = yaw
@@ -185,6 +187,10 @@ class Env:
         if current_distance <= self.threshold_arrive:
             # done = True
             arrive = True
+
+        if abs(self.pitch) > 1:
+            done = True
+            arrive = False
 
         return scan_range, current_distance, yaw, rel_theta, diff_angle, done, arrive
 
