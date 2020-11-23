@@ -30,6 +30,10 @@ def main():
     rospy.init_node('ddpg_stage_1')
     env = Env(is_training)
     agent = DDPG(env, state_dim, action_dim)
+    
+    import ipdb
+    ipdb.set_trace()
+
     past_action = np.array([0., 0.])
     print('State Dimensions: ' + str(state_dim))
     print('Action Dimensions: ' + str(action_dim))
