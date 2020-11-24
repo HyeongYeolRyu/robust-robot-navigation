@@ -14,7 +14,7 @@ from std_srvs.srv import Empty
 from gazebo_msgs.srv import SpawnModel, DeleteModel
 
 
-diagonal_dis = math.sqrt(2) * (3.6 + 3.8)
+# diagonal_dis = math.sqrt(2) * (3.6 + 3.8)
 # goal_model_dir = os.path.join(os.path.split(os.path.realpath(__file__))[0], '..', '..', 'turtlebot3_simulations',
 #                               'turtlebot3_gazebo', 'models', 'Target', 'model.sdf')
 
@@ -27,7 +27,7 @@ class env(core.Env):
         1. step(): Execute new action and return state
         2. reset(): Rest environment at the end of each episode
         and generate new goal position for next episode
-        3. _get_state(): Receive and process raw scan observation then output states
+        3. _process_scan_obs(): Receive and process raw scan observation
         4. _compute_reward(): Set a reward value given a state
     """
 
@@ -36,7 +36,7 @@ class env(core.Env):
         # Sensor specification
         self.sensor_range = 4
         self.sensor_timeout = 0.5
-        self.sensor_dim = 720  # 480 dim.
+        self.sensor_dim = 480
 
         # Sensor visualization
         self.visualize_scan_obs = False
@@ -55,6 +55,14 @@ class env(core.Env):
         self.stacked_scan_obs = np.full((self.stack_size, self.sensor_dim), self.sensor_range)
         self.robot_position = PoseStamped()
         self.past_action = np.array([0., 0.])
+        self.pitch = 0.
+        self.simulation_speed = 1  # normal_speed
+        self.sleep_time = 0.02 * self.simulation_speed
+        self.past_state = np.concatenate((np.full(self.sensor_dim, self.sensor_range),
+                                          np.array([0, 0, 0, 0]))
+                                        )
+        self.past_reward = 0
+        self.past_info = {'is_arrive': False}
 
         # Input state
         self.past_distance = 0.
@@ -63,6 +71,8 @@ class env(core.Env):
         # Goal position
         self.goal_position.position.x = 0.
         self.goal_position.position.y = 0.
+        # Goal arrival threshold
+        self.threshold_arrive = 0.5
 
         # Service
         self.reset_proxy = rospy.ServiceProxy('gazebo/reset_simulation', Empty)
@@ -82,26 +92,21 @@ class env(core.Env):
         # self.sub_model_state = rospy.Subscriber('gazebo/model_states', ModelStates, self._robot_state_cb)
         # self.sub_scan = rospy.Subscriber('scan', LaserScan, self._robot_scan_cb)
 
-        if is_training:
-            self.threshold_arrive = 0.35
-        else:
-            self.threshold_arrive = 0.4
-
         if self.visualize_scan_obs or self.visualize_stacked_scan_obs:
-            dummy = np.zeros((self.visualize_y_axis_size, 720))
+            dummy = np.zeros((self.visualize_y_axis_size, self.sensor_dim))
             plt.title('Scan observation')
             self.vis_window = plt.imshow(dummy, cmap='gray', vmin=0, vmax=4)
 
         self._generate_goal()
 
-        obs = self.reset()
-        self.act_limit_max = np.array([1.25, 0.5])
+        state = self.reset()
+        self.act_limit_max = np.array([1.5, 0.5])
         self.act_limit_min = np.array([0.0, -0.5])
         self.action_space = spaces.Box(self.act_limit_min, self.act_limit_max, dtype='float32') 
-        self.observation_space = spaces.Box(-np.inf, np.inf, shape=obs.shape, dtype='float32')
-
+        self.observation_space = spaces.Box(-np.inf, np.inf, shape=state.shape, dtype='float32')
 
     def _get_goal_distance(self):
+        goal_distance = 0.
         while True:
             try:
                 goal_distance = math.hypot((self.goal_position.position.x - self.position.x), (self.goal_position.position.y - self.position.y))
@@ -124,6 +129,7 @@ class env(core.Env):
         orientation = odom.pose.pose.orientation
         q_x, q_y, q_z, q_w = orientation.x, orientation.y, orientation.z, orientation.w
         yaw = round(math.degrees(math.atan2(2 * (q_x * q_y + q_w * q_z), 1 - 2 * (q_y * q_y + q_z * q_z))))
+        # self.pitch = math.degrees(math.atan2((2 * q_x * q_w) - (2 * q_y * q_z), 1 - (2 * q_x*q_x + 2 * q_z*q_z)))
 
         if yaw >= 0:
             yaw = yaw
@@ -150,25 +156,25 @@ class env(core.Env):
             theta = 0
         else:
             theta = math.pi
-        rel_theta = round(math.degrees(theta), 2)
+        rel_angle = round(math.degrees(theta), 2)
 
-        diff_angle = abs(rel_theta - yaw)
+        # diff_angle = abs(rel_angle - yaw)
 
-        if diff_angle <= 180:
-            diff_angle = round(diff_angle, 2)
-        else:
-            diff_angle = round(360 - diff_angle, 2)
+        # if diff_angle <= 180:
+        #     diff_angle = round(diff_angle, 2)
+        # else:
+        #     diff_angle = round(360 - diff_angle, 2)
 
-        self.rel_theta = rel_theta
+        self.rel_angle = rel_angle
         self.yaw = yaw
-        self.diff_angle = diff_angle
+        # self.diff_angle = diff_angle
 
-    def _get_state(self, scan):
+    def _process_scan_obs(self, scan):
         scan_range = []
         yaw = self.yaw
-        rel_theta = self.rel_theta
-        diff_angle = self.diff_angle
-        min_range = 0.6
+        rel_angle = self.rel_angle
+        # diff_angle = self.diff_angle
+        min_range = 0.5
         done = False
         arrive = False
 
@@ -181,6 +187,7 @@ class env(core.Env):
                 scan_range.append(scan.ranges[i])
 
         if min_range > min(scan_range) > 0:
+            print('Collision!!!')
             done = True
 
         if self.visualize_scan_obs:
@@ -197,30 +204,47 @@ class env(core.Env):
             plt.pause(0.0000000001)
             plt.draw()
 
-        current_distance = math.hypot(self.goal_position.position.x - self.position.x, self.goal_position.position.y - self.position.y)
-        if current_distance <= self.threshold_arrive:
-            # done = True
+        rel_dist = math.hypot(self.goal_position.position.x - self.position.x, self.goal_position.position.y - self.position.y)
+        if rel_dist <= self.threshold_arrive:
+            print('Reach the goal!!!')
+            done = True
             arrive = True
 
-        return scan_range, current_distance, yaw, rel_theta, diff_angle, done, arrive
+        if abs(self.pitch) > math.degrees(180):
+            print("======================================================")
+            print("pitch value: {}".format(self.pitch))
+            print("======================================================")
+            done = True
+            arrive = False
+
+        return scan_range, rel_dist, yaw, rel_angle, done, arrive
 
     def _compute_reward(self, done, arrive):
-        current_distance = math.hypot(self.goal_position.position.x - self.position.x, self.goal_position.position.y - self.position.y)
+        r_base = -0.05  # Small negative base reward that makes robot move
+        r_goal = 0.
+        r_done = 0.
+
+        current_distance = math.hypot(self.goal_position.position.x - self.position.x,
+                                      self.goal_position.position.y - self.position.y)
         distance_rate = (self.past_distance - current_distance)
 
-        reward = 500.*distance_rate
+        r_distance = 100.*distance_rate
         self.past_distance = current_distance
 
-        if done:
-            reward = -100.
-            self.pub_cmd_vel.publish(Twist())
-
         if arrive:
-            reward = 120.
+            r_goal = 100.
+        elif done:
+            r_done = -50.
+            # self.pub_cmd_vel.publish(Twist())
+
+        # total reward
+        reward = r_base + r_distance + r_goal + r_done
 
         return reward
 
     def step(self, action):
+        self._unpause_gazebo()
+
         linear_vel = action[0]
         ang_vel = action[1]
 
@@ -230,50 +254,60 @@ class env(core.Env):
         vel_cmd.angular.z = ang_vel
         self.pub_cmd_vel.publish(vel_cmd)
         self.pub_robot_position.publish(self.robot_position)  # Publish current position of the robot
-        self.pub_goal.publish(self.goal_point_stamped) # Publish Goal position.
+        self.pub_goal.publish(self.goal_point_stamped)  # Publish Goal position.
 
-        data = None
-        while data is None:
-            try:
-                data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
-            except Exception as e:
-                print(f"[Env] Error in step function: {e}")
+        # This should be included for processing the delay
+        # rospy.sleep(self.sleep_time)
 
-        state, rel_dis, yaw, rel_theta, diff_angle, done, arrive = self._get_state(data)
-        state = [i / self.sensor_range for i in state]
+        try:
+            data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
+            state, rel_dist, yaw, rel_angle, done, arrive = self._process_scan_obs(data)
+            state = [i / self.sensor_range for i in state]
+            for pa in self.past_action:
+                state.append(pa)
+            self.past_action = action
+            state = state + [rel_dist,
+                             rel_angle / 360,
+                             yaw / 360]
 
-        for pa in self.past_action:
-            state.append(pa)
+            reward = self._compute_reward(done, arrive)
 
-        self.past_action = action
+            info = {
+                'is_arrive': arrive
+            }
+            self.past_state = state
+            self.past_reward = reward
+            self.past_info = info
+        except Exception as e:
+            print(f"[Env] Error in step function: {e} --> use stored past value instead.")
+            state = self.past_state
+            reward = self.past_reward
+            info = self.past_info
+            done = True
 
-        state = state + [rel_dis / diagonal_dis, yaw / 360, rel_theta / 360, diff_angle / 180]
-        reward = self._compute_reward(done, arrive)
+        self._pause_gazebo()
 
-        info = {
-            'is_arrive': arrive
-        }
         return np.asarray(state), reward, done, info
 
     def reset(self):
         """
         Reset the environment
 
-        1. Pause gazebo
+        1. Unpause gazebo
         2. Reset gazebo
           2-1. Delete target
           2-2. Reset simulation
         3. Generate target
-        4. Unpause gazebo
-        5. Return state
+        4. Get state
+        5. Pause gazebo
+        6. Return state
         """
 
         # 0. Initialize stacked_scan_obs
         self.stacked_scan_obs = np.full((self.stack_size, self.sensor_dim), self.sensor_range)
 
-        # 1. Pause gazebo
-        self._pause_gazebo()
-
+        # 1. Unpause gazebo
+        self._unpause_gazebo()
         # 2-1. Delete target
         rospy.wait_for_service('/gazebo/delete_model')
         # try:
@@ -293,28 +327,39 @@ class env(core.Env):
         # Publish goal position
         self.pub_goal.publish(self.goal_point_stamped)
 
-        # 4. Unpause gazebo
-        self._unpause_gazebo()
+        # 4. Get state
+        try:
+            data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
+            self.goal_distance = self._get_goal_distance()
 
-        # 5. Return state
-        data = None
-        while data is None:
-            try:
-                data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
-            except Exception as e:
-                print(f"[Env] Error in step function: {e}")
-                # data = np.zeros(self.sensor_dim)
-                # break
+            scan, rel_dist, yaw, rel_angle, done, arrive = self._process_scan_obs(data)
 
-        self.goal_distance = self._get_goal_distance()
-        state, rel_dis, yaw, rel_theta, diff_angle, done, arrive = self._get_state(data)
-        state = [i / 4 for i in state]
+            state = [i / self.sensor_range for i in scan]  # Normalize scan data
 
-        state.append(0)
-        state.append(0)
+            # Past action: Initially, linear & angular velocity: 0, 0
+            state.append(0)
+            state.append(0)
+            state = state + [rel_dist,  # Relative distance to goal
+                             rel_angle / 360,  # Relative angle to goal
+                             yaw / 360]  # Current yaw of robot
+            reward = self._compute_reward(done, arrive)
+            info = {
+                'is_arrive': arrive
+            }
+            self.past_state = state
+            self.past_reward = reward
+            self.past_info = info
+        except Exception as e:
+            print(f"[Env] Error in step function: {e} --> use stored past value instead.")
+            state = self.past_state
+            reward = self.past_reward
+            info = self.past_info
+            done = True
 
-        state = state + [rel_dis / diagonal_dis, yaw / 360, rel_theta / 360, diff_angle / 180]
+        # 5. Pause gazebo
+        self._pause_gazebo()
 
+        # 6. Return state
         return np.asarray(state)
 
     def _pause_gazebo(self):
