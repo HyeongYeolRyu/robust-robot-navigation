@@ -3,7 +3,7 @@ import scipy.signal
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 def combined_shape(length, shape=None):
     if shape is None:
@@ -17,7 +17,7 @@ def mlp(sizes, activation, output_activation=nn.Identity):
         act = activation if j < len(sizes)-2 else output_activation
         if j < len(sizes)-2:
             layers += [nn.Linear(sizes[j], sizes[j+1]), nn.BatchNorm1d(sizes[j+1]), act()]
-        else:
+        else: 
             layers += [nn.Linear(sizes[j], sizes[j+1]), act()]
     return nn.Sequential(*layers)
 
@@ -30,25 +30,15 @@ class MLPActor(nn.Module):
 
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation, act_mean, act_std):
         super().__init__()
-        self.scan_dim = 10
+        self.scan_dim = 480
         self.state_dim = 6
         self.fc1 = nn.Linear(self.scan_dim, 512)
-        self.bn1 = nn.BatchNorm1d(512)
         self.fc2 = nn.Linear(512, 256)
-        self.bn2 = nn.BatchNorm1d(256)
-        self.fc3 = nn.Linear(256, 32)
-        self.bn3 = nn.BatchNorm1d(32)
-
-        self.fc4 = nn.Linear(self.state_dim, 64)
-        self.bn4 = nn.BatchNorm1d(64)
-        self.fc5 = nn.Linear(64, 32)
-        self.bn5 = nn.BatchNorm1d(32)
-
-        self.fc6 = nn.Linear(64, 64)
-        self.bn6 = nn.BatchNorm1d(64)
-        self.fc7 = nn.Linear(64, 2)
-        # self.bn7 = nn.BatchNorm1d(2) # TODO
-        self.tanh = nn.Tanh()
+        self.fc3 = nn.Linear(256, 6)
+        self.fc4 = nn.Linear(self.state_dim, 16)
+        self.fc5 = nn.Linear(16, 6)
+        self.fc6 = nn.Linear(12, 2)
+        self.relu = nn.ReLU(True)
 
         # pi_sizes = [obs_dim] + list(hidden_sizes) + [act_dim]
         # self.pi = mlp(pi_sizes, activation, output_activation=nn.Tanh)
@@ -57,21 +47,18 @@ class MLPActor(nn.Module):
 
     def forward(self, obs):
         scan, state = obs[:, :self.scan_dim], obs[:, self.scan_dim:]
-        # print(f'state:{state}')
 
-        scan = F.relu(self.bn1(self.fc1(scan)))
-        scan = F.relu(self.bn2(self.fc2(scan)))
-        scan = F.relu(self.bn3(self.fc3(scan)))
+        scan = self.relu(self.fc1(scan))
+        scan = self.relu(self.fc2(scan))
+        scan = self.relu(self.fc3(scan))
 
-        state = F.relu(self.bn4(self.fc4(state)))
-        state = F.relu(self.bn5(self.fc5(state)))
+        state = self.relu(self.fc4(state))
+        state = self.relu(self.fc5(state))
 
         out = torch.cat([scan, state], dim=-1)
-        out = F.relu(self.bn6(self.fc6(out)))
-        # out = self.tanh(self.bn7(self.fc7(out)))
-        out = self.tanh(self.fc7(out))
-        # print(f"out {out}")
+        out = self.fc6(out)
 
+        # print(f"out {out}")
         # Return output from network scaled to action space limits.
         if out.is_cuda:
             return (self.act_std.cuda() * out) + self.act_mean.cuda()
@@ -92,37 +79,31 @@ class MLPQFunction(nn.Module):
 
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
         super().__init__()
-        self.scan_dim = 10
+        self.scan_dim = 480
         self.state_dim = 6
         self.fc1 = nn.Linear(self.scan_dim, 512)
-        self.bn1 = nn.BatchNorm1d(512)
         self.fc2 = nn.Linear(512, 256)
-        self.bn2 = nn.BatchNorm1d(256)
-        self.fc3 = nn.Linear(256, 32)
-        self.bn3 = nn.BatchNorm1d(32)
-
-        self.fc4 = nn.Linear(self.state_dim+2, 64)
-        self.bn4 = nn.BatchNorm1d(64)
-        self.fc5 = nn.Linear(64, 32)
-        self.bn5 = nn.BatchNorm1d(32)
-
-        self.fc6 = nn.Linear(64, 64)
-        self.bn6 = nn.BatchNorm1d(64)
-        self.fc7 = nn.Linear(64, 1)
+        self.fc3 = nn.Linear(256, 6)
+        self.fc4 = nn.Linear(self.state_dim, 16)
+        self.fc5 = nn.Linear(16, 6)
+        self.fc6 = nn.Linear(14, 2)
+        self.relu = nn.ReLU(True)
 
     def forward(self, obs, act):
         scan, state = obs[:, :self.scan_dim], obs[:, self.scan_dim:]
-        scan = F.relu(self.bn1(self.fc1(scan)))
-        scan = F.relu(self.bn2(self.fc2(scan)))
-        scan = F.relu(self.bn3(self.fc3(scan)))
+        scan = self.relu(self.fc1(scan))
+        scan = self.relu(self.fc2(scan))
+        scan = self.relu(self.fc3(scan))
 
-        state = torch.cat([state, act], dim=-1)
-        state = F.relu(self.bn4(self.fc4(state)))
-        state = F.relu(self.bn5(self.fc5(state)))
+        state = self.relu(self.fc4(state))
+        state = self.relu(self.fc5(state))
 
-        out = torch.cat([scan, state], dim=-1)
-        out = F.relu(self.bn6(self.fc6(out)))
-        out = self.fc7(out)
+        out = torch.cat([scan, state, act], dim=-1)
+        out = self.fc6(out)
+
+        import ipdb
+        ipdb.set_trace()
+        print(f'out dim. {out.size()}')
 
         return torch.squeeze(out, -1)  # Critical to ensure q has right shape.
 

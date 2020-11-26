@@ -41,12 +41,16 @@ class ReplayBuffer:
                      done=self.done_buf[idxs])
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
 
+import torch.nn as nn
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_uniform(m.weight)
+        m.bias.data.fill_(0.01)
 
-
-def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-         steps_per_epoch=1000, epochs=1000, replay_size=int(1e5), gamma=0.99, 
-         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=5000, 
-         update_after=500, update_every=100, act_noise=0.2, num_test_episodes=10, 
+def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
+         steps_per_epoch=1000, epochs=10000, replay_size=int(5e4), gamma=0.99,
+         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=1000,
+         update_after=500, update_every=250, act_noise=0.05, num_test_episodes=1,
          max_ep_len=500, logger_kwargs=dict(), save_freq=1):
     """
     Deep Deterministic Policy Gradient (DDPG)
@@ -147,10 +151,10 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Create actor-critic module and target networks
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    ac.apply(init_weights)
     ac_targ = deepcopy(ac)
-    ac.eval() # in-active training BN
+    ac.eval()  # in-active training BN
     print(f"[MODEL] Actor_Critic: {ac}")
-    
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
     for p in ac_targ.parameters():
@@ -167,7 +171,9 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     def compute_loss_q(data):
         o, a, r, o2, d = data['obs'], data['act'], data['rew'], data['obs2'], data['done']
 
-        q = ac.q(o,a)
+        # import ipdb
+        # ipdb.set_trace()
+        q = ac.q(o, a)
 
         # Bellman backup for Q function
         with torch.no_grad():
@@ -238,15 +244,18 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         return np.clip(a, env.act_limit_min, env.act_limit_max)
 
     def test_agent():
+        print("[DDPG] eval......")
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = env.reset(), False, 0, 0
-            while not(d or (ep_len == max_ep_len)):
+            # while not(d or (ep_len == max_ep_len)):
+            while not(d or (ep_len == 100)):
                 # Take deterministic actions at test time (noise_scale=0)
-                o, r, d, _ = env.step(get_action(o, 0))
+                a = get_action(o, 0)
+                print(f"[Eval] a: {a}")
+                o, r, d, _ = env.step(a)
                 ep_ret += r
                 ep_len += 1
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
-
 
     # Prepare for interaction with environment
     total_steps = steps_per_epoch * epochs
@@ -258,23 +267,29 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         
         # Until start_steps have elapsed, randomly sample actions
         # from a uniform distribution for better exploration. Afterwards, 
-        # use the learned policy (with some noise, via act_noise). 
+        # use the learned policy (with some noise, via act_noise).
+
+        print(f"O {o[-4]:.3f} {o[-3]:.3f} {o[-2]:.3f} {o[-1]:.3f} ")
         if t > start_steps:
-            a = get_action(o, act_noise)
-            # print(f"t {t} a {a}")
+            if np.random.rand() > 0.3:
+                a = get_action(o, act_noise)
+            else:
+                a = env.action_space.sample()
         else:
             a = env.action_space.sample()
+        print(f't {t:7.0f} | a [{a[0]:.3f},{a[1]:.3f}]')
 
         # Step the env
         o2, r, d, info = env.step(a)
         # print(f"O {o[-4:]} |A {a} |O2 {o2[-4:]} |R {r} |D {d} |Info {info}")
+        print(f"                    ------------------> R {r:.3f}")
         ep_ret += r
         ep_len += 1
 
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
         # that isn't based on the agent's state)
-        d = False if ep_len==max_ep_len else d
+        d = False if ep_len == max_ep_len else d
 
         # Store experience to replay buffer
         replay_buffer.store(o, a, r, o2, d)
@@ -290,7 +305,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         # Update handling
         if t >= update_after and t % update_every == 0:
-            ac.train() # active training BN
+            ac.train()  # active training BN
             ac_targ.train()
             if torch.cuda.is_available():
                 ac.cuda()
@@ -318,6 +333,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
             # Test the performance of the deterministic version of the agent.
             test_agent()
+            o, d, ep_ret, ep_len = env.reset(), False, 0, 0
 
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)
@@ -331,6 +347,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             logger.log_tabular('LossQ', average_only=True)
             logger.log_tabular('Time', time.time()-start_time)
             logger.dump_tabular()
+
 
 if __name__ == '__main__':
     import argparse
