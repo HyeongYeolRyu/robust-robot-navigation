@@ -4,11 +4,11 @@ import torch
 from torch.optim import Adam
 import gym
 import time
+import datetime
+import rospy
 import spinup.algos.pytorch.ddpg.core as core
 from spinup.utils.logx import EpochLogger
 
-import rospy
-import gym_gazebo
 
 class ReplayBuffer:
     """
@@ -50,7 +50,7 @@ def init_weights(m):
 def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
          steps_per_epoch=1000, epochs=10000, replay_size=int(5e4), gamma=0.99,
          polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=1000,
-         update_after=500, update_every=250, act_noise=0.05, num_test_episodes=1,
+         update_after=500, update_every=500, act_noise=0.05, num_test_episodes=1,
          max_ep_len=500, logger_kwargs=dict(), save_freq=1):
     """
     Deep Deterministic Policy Gradient (DDPG)
@@ -271,10 +271,10 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
         print(f"O {o[-4]:.3f} {o[-3]:.3f} {o[-2]:.3f} {o[-1]:.3f} ")
         if t > start_steps:
-            if np.random.rand() > 0.3:
-                a = get_action(o, act_noise)
-            else:
-                a = env.action_space.sample()
+            # if np.random.rand() > 0.3:
+            a = get_action(o, act_noise)
+            # else:
+            # a = env.action_space.sample()
         else:
             a = env.action_space.sample()
         print(f't {t:7.0f} | a [{a[0]:.3f},{a[1]:.3f}]')
@@ -282,7 +282,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
         # Step the env
         o2, r, d, info = env.step(a)
         # print(f"O {o[-4:]} |A {a} |O2 {o2[-4:]} |R {r} |D {d} |Info {info}")
-        print(f"                    ------------------> R {r:.3f}")
+        print(f"                    ------------------> R: {r:.3f}")
         ep_ret += r
         ep_len += 1
 
@@ -335,6 +335,10 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             test_agent()
             o, d, ep_ret, ep_len = env.reset(), False, 0, 0
 
+            sec = time.time() - start_time
+            elapsed_time = str(datetime.timedelta(seconds=sec)).split('.')[0]
+
+
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)
             logger.log_tabular('EpRet', with_min_and_max=True)
@@ -345,7 +349,8 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             logger.log_tabular('QVals', with_min_and_max=True)
             logger.log_tabular('LossPi', average_only=True)
             logger.log_tabular('LossQ', average_only=True)
-            logger.log_tabular('Time', time.time()-start_time)
+            # logger.log_tabular('Time', time.time()-start_time)
+            logger.log_tabular('Time', elapsed_time)
             logger.dump_tabular()
 
 

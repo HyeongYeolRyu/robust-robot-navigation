@@ -12,8 +12,8 @@ def combined_shape(length, shape=None):
 
 
 def mlp(sizes, activation, output_activation=nn.Identity):
-    layers = []
-    for j in range(len(sizes)-1):
+    layers 
+    for j in ange(len(sizes)-1):
         act = activation if j < len(sizes)-2 else output_activation
         if j < len(sizes)-2:
             layers += [nn.Linear(sizes[j], sizes[j+1]), nn.BatchNorm1d(sizes[j+1]), act()]
@@ -112,16 +112,16 @@ class MLPQFunction(nn.Module):
 
     def forward(self, obs, act):
         scan, state = obs[:, :self.scan_dim], obs[:, self.scan_dim:]
-        scan = F.relu(self.bn1(self.fc1(scan)))
-        scan = F.relu(self.bn2(self.fc2(scan)))
-        scan = F.relu(self.bn3(self.fc3(scan)))
+        scan = F.relu(self.fc1(scan))
+        scan = F.relu(self.fc2(scan))
+        scan = F.relu(self.fc3(scan))
 
         state = torch.cat([state, act], dim=-1)
-        state = F.relu(self.bn4(self.fc4(state)))
-        state = F.relu(self.bn5(self.fc5(state)))
+        state = F.relu(self.fc4(state))
+        state = F.relu(self.fc5(state))
 
         out = torch.cat([scan, state], dim=-1)
-        out = F.relu(self.bn6(self.fc6(out)))
+        out = F.relu(self.fc6(out))
         out = self.fc7(out)
 
         return torch.squeeze(out, -1)  # Critical to ensure q has right shape.

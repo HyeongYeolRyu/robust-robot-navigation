@@ -1,7 +1,7 @@
 <launch>
   <arg name="kbd_teleop" default="false"/>
   <arg name="rqt_teleop" default="false"/>
-  <arg name="scene_file" default="$(find pedsim_simulator)scenarios/social_contexts.xml"/>
+  <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/social_contexts.xml"/>
   <arg name="default_queue_size" default="10"/>
   <arg name="max_robot_speed" default="1.5"/>
   <arg name="robot_mode" default="1"/>

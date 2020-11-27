@@ -1,7 +1,9 @@
 <?xml version="1.0"?>
 <robot name="turtlebot3_waffle_sim" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:arg name="laser_visual"  default="true"/>
+  <!--
   <xacro:arg name="camera_visual" default="false"/>
+  -->
   <xacro:arg name="imu_visual"    default="false"/>
 
   <gazebo reference="base_link">
@@ -120,10 +122,10 @@
       <ray>
         <scan>
           <horizontal>
-            <samples>10</samples>
+            <samples>480</samples>
             <resolution>1</resolution>
-            <min_angle>-1.74533</min_angle>
-            <max_angle>1.74533</max_angle>
+            <min_angle>0</min_angle>
+            <max_angle>3.49066</max_angle>
           </horizontal>
         </scan>
         <range>
@@ -156,6 +158,7 @@
     </plugin>
   </gazebo>
 
+  <!--
   <gazebo reference="camera_rgb_frame">
     <sensor type="depth" name="realsense_R200">
       <always_on>true</always_on>
@@ -199,5 +202,6 @@
       </plugin>
     </sensor>
   </gazebo>
+  -->
 
 </robot>

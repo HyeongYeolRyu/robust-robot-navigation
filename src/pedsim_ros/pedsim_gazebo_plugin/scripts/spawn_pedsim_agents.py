@@ -9,7 +9,7 @@ import rospy
 from gazebo_msgs.srv import SpawnModel
 from geometry_msgs.msg import *
 from rospkg import RosPack
-from pedsim_msgs.msg  import AgentStates
+from pedsim_msgs.msg import AgentStates
 
 # xml file containing a gazebo model to represent agent, currently is represented by a cubic but can be changed
 global xml_file
@@ -32,8 +32,6 @@ def actor_poses_callback(actors):
     rospy.signal_shutdown("all agents have been spawned !")
 
 
-
-
 if __name__ == '__main__':
 
     rospy.init_node("spawn_pedsim_agents")
@@ -46,10 +44,10 @@ if __name__ == '__main__':
     file_xml = open(actor_model_file)
     xml_string = file_xml.read()
 
-    print("Waiting for gazebo services...")
-    rospy.wait_for_service("gazebo/spawn_sdf_model")
-    spawn_model = rospy.ServiceProxy("gazebo/spawn_sdf_model", SpawnModel)
-    print("service: spawn_sdf_model is available ....")
-    rospy.Subscriber("/pedsim_simulator/simulated_agents", AgentStates, actor_poses_callback)
+    # print("Waiting for gazebo services...")
+    # rospy.wait_for_service("gazebo/spawn_sdf_model")
+    # spawn_model = rospy.ServiceProxy("gazebo/spawn_sdf_model", SpawnModel)
+    # print("service: spawn_sdf_model is available ....")
+    # rospy.Subscriber("/pedsim_simulator/simulated_agents", AgentStates, actor_poses_callback)
 
     rospy.spin()

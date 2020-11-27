@@ -51,7 +51,7 @@ class env(core.Env):
         self.robot_scan = np.zeros(self.sensor_dim)
         self.robot_state_init = False
         self.robot_scan_init = False
-        self.stack_size = 20
+        self.stack_size = 30
         self.stacked_scan_obs = np.full((self.stack_size, self.sensor_dim), self.sensor_range)
         self.robot_position = PoseStamped()
         self.past_action = np.array([0., 0.])
@@ -73,7 +73,7 @@ class env(core.Env):
         self.goal_position.position.x = 0.
         self.goal_position.position.y = 0.
         # Goal arrival threshold
-        self.threshold_arrive = 0.5
+        self.threshold_arrive = 0.7
 
         # Service
         self.reset_proxy = rospy.ServiceProxy('gazebo/reset_simulation', Empty)
@@ -179,7 +179,7 @@ class env(core.Env):
         yaw = self.yaw
         rel_angle = self.rel_angle
         diff_angle = self.diff_angle
-        min_range = 0.5
+        min_range = 0.3
         done = False
         arrive = False
 
@@ -192,7 +192,9 @@ class env(core.Env):
                 scan_range.append(scan.ranges[i])
 
         if min_range > min(scan_range) > 0:
-            print('Collision!!!')
+            print("==============================================================================================")
+            print("                                                                                  Collision!!!")
+            print("==============================================================================================")
             done = True
 
         if self.visualize_scan_obs:
@@ -213,7 +215,9 @@ class env(core.Env):
                               (self.goal_position.position.y - self.position.y)**2)
 
         if rel_dist <= self.threshold_arrive:
-            print('Reach the goal!!!')
+            print("==============================================================================================")
+            print("                                                                         Arrive at the goal!!!")
+            print("==============================================================================================")
             done = True
             arrive = True
 
@@ -228,55 +232,37 @@ class env(core.Env):
         return scan_range, rel_dist, yaw, rel_angle, diff_angle, done, arrive
 
     def _compute_reward(self, done, arrive):
-        # r_base = -0.1  # Small negative base reward that makes robot move
-        r_base = 0.0  # Small negative base reward that makes robot move
+        r_base = -0.05  # Small negative base reward that makes robot move
         r_goal = 0.
         r_done = 0.
+        r_rotation = 0.
 
         current_distance = math.sqrt((self.goal_position.position.x - self.position.x)**2 + 
                                      (self.goal_position.position.y - self.position.y)**2)
-
         distance_rate = (self.past_distance - current_distance)
 
-        r_distance = 300.*distance_rate  # 500.
-
-        if abs(r_distance) > 10:
-            print("=========================")
-            print("=========================")
-            print("=========================")
-            print("=========================")
-            print("=========================")
-            print("=========================")
-            print(r_distance)
-
-            print(f'current dist: {current_distance}')
-            print(f'past dist: {self.past_distance}')
-            
-            print("=========================")
-        # current_distance = np.sqrt((self.goal_position.position.x - self.position.x)**2 +
-        #                            (self.goal_position.position.y - self.position.y)**2)
-        # r_distance = 20 - 1 * current_distance
-
+        r_distance = 300.*distance_rate
         self.past_distance = current_distance
 
-        # r_heading = -0.02 * self.diff_angle
-        # r_heading = -self.diff_angle/180*5
-        r_heading = 0.
+        r_heading = -self.diff_angle/360
+
+        if abs(self.past_action[1]) >= 0.4:
+            r_rotation = -0.3 * abs(self.past_action[1])
 
         if arrive:
-            # r_goal = 120.
-            reward = 120.
-            return reward
+            r_goal = 120.
+            self.pub_cmd_vel.publish(Twist())
+            # return reward
         elif done:
             r_done = -100.
-            return r_done
-            # reward = -80.
-            # self.pub_cmd_vel.publish(Twist())
+            self.pub_cmd_vel.publish(Twist())
+            # return r_done
 
-        # total reward
-        print(f"                    ------------------> {r_base:.3f} / {r_distance:.3f} / {r_goal:.3f} / {r_done:.3f} / {r_heading:.3f}")
-        reward = r_base + r_distance + r_goal + r_done + r_heading
-        # reward = np.clip(reward, -10, 10)
+        # Total reward
+        print(f"          ------------------>  base  / dist  / heading / rot   / goal  / done")
+        print(f"          ------------------> {r_base:.3f} / {r_distance:.3f} / {r_heading:.3f} / {r_rotation:.3f} / {r_goal:.3f} / {r_done:.3f}")
+
+        reward = r_base + r_distance + r_goal + r_done + r_heading + r_rotation
 
         return reward
 
@@ -367,8 +353,6 @@ class env(core.Env):
         # 3. Generate target
         self._generate_goal()
 
-        rospy.sleep(0.05)
-
         # Publish goal position
         self.pub_goal.publish(self.goal_point_stamped)
 
@@ -435,10 +419,10 @@ class env(core.Env):
             # target.model_name = 'target'  # the same with sdf name
             # target.model_xml = goal_urdf
             offset_from_wall = 5
-            #self.goal_position.position.x = random.uniform(0+offset_from_wall, 30-offset_from_wall)
-            #self.goal_position.position.y = random.uniform(0+offset_from_wall, 30-offset_from_wall)
-            self.goal_position.position.x = 20 - 2.5
-            self.goal_position.position.y = 15 - 2.5
+            self.goal_position.position.x = random.uniform(5 + offset_from_wall, 25 - offset_from_wall)
+            self.goal_position.position.y = random.uniform(5 + offset_from_wall, 25 - offset_from_wall)
+            # self.goal_position.position.x = 20 - 2.5
+            # self.goal_position.position.y = 15 - 2.5
 
             # For publishing goal position
             self.goal_point_stamped.point.x = self.goal_position.position.x

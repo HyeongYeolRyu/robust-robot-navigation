@@ -4,6 +4,7 @@ from torch.optim import Adam
 import gym
 import time
 import spinup.algos.pytorch.ppo.core as core
+import rospy
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
@@ -86,9 +87,9 @@ class PPOBuffer:
 
 
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
-        steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
-        vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10):
+        steps_per_epoch=500, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
+        vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=500,
+        target_kl=0.01, logger_kwargs=dict(), save_freq=1):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -204,6 +205,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     torch.manual_seed(seed)
     np.random.seed(seed)
 
+    rospy.init_node('PPO_Train')
+
     # Instantiate environment
     env = env_fn()
     obs_dim = env.observation_space.shape
@@ -211,7 +214,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     # Create actor-critic module
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
-
+    print(ac)
     # Sync params across processes
     sync_params(ac)
 
@@ -289,7 +292,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                      KL=kl, Entropy=ent, ClipFrac=cf,
                      DeltaLossPi=(loss_pi.item() - pi_l_old),
                      DeltaLossV=(loss_v.item() - v_l_old))
-
+    def action_clip(a):
+        return np.clip(a, env.action_space.low, env.action_space.high)
     # Prepare for interaction with environment
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
@@ -297,9 +301,14 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Main loop: collect experience in env and update/log each epoch
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
-            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            print(f"S: {o}")
+            print(f"O {o[-4]:.3f} {o[-3]:.3f} {o[-2]:.3f} {o[-1]:.3f} ")
 
+            a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            a = action_clip(a)
+            print(f't {t:7.0f}/{epoch} | a [{a[0]:.3f},{a[1]:.3f}]')
             next_o, r, d, _ = env.step(a)
+            print(f"                    ------------------> R {r:.3f}")
             ep_ret += r
             ep_len += 1
 

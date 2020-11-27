@@ -36,4 +36,4 @@ If you reference or use Spinning Up in your research, please cite:
 ==========================================================
 
 python3 -m spinup.run ddpg_pytorch --env NAVEnv-v0 --exp_name Test_123
-python3 -m spinup.run plot log/Test_123/
+python3 -m spinup.run plot log/Test_123/  --value Epoch AverageEpRet EpLen AverageQVals LossPi LossQ

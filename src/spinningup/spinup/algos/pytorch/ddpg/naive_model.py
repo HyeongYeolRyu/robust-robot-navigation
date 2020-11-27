@@ -14,7 +14,7 @@ class ConvBlock(nn.Module):
 
         self.conv = nn.Conv2d(
             in_channels, out_channels,
-            (kernel_h, kernel_w), (stride_h, stride_w)
+            (kernel_h, kernel_w), (stride_h, stride_w), bias=False
         )
         self.relu = nn.ReLU(inplace=True)
         self.batchnorm = nn.BatchNorm2d(out_channels)

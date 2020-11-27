@@ -1,9 +1,11 @@
 <?xml version="1.0"?>
 <robot name="turtlebot3_waffle_pi_sim" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:arg name="laser_visual"  default="true"/>
+  <!--
   <xacro:arg name="camera_visual" default="false"/>
+  -->
   <xacro:arg name="imu_visual"    default="false"/>
-
+  
   <gazebo reference="base_link">
     <material>Gazebo/DarkGrey</material>
   </gazebo>
@@ -119,10 +121,10 @@
       <ray>
         <scan>
           <horizontal>
-            <samples>10</samples>
+            <samples>480</samples>
             <resolution>1</resolution>
-            <min_angle>-1.74533</min_angle>
-            <max_angle>1.74533</max_angle>
+            <min_angle>0</min_angle>
+            <max_angle>3.49066</max_angle>
           </horizontal>
         </scan>
         <range>
@@ -133,7 +135,7 @@
         <noise>
           <type>gaussian</type>
           <mean>0.0</mean>
-          <stddev>0.01</stddev>
+          <stddev>0.0</stddev>
         </noise>
       </ray>
       <plugin name="gazebo_ros_lds_lfcd_controller" filename="libgazebo_ros_laser.so">
@@ -156,6 +158,7 @@
   </gazebo>
 
 <!--link : https://www.raspberrypi.org/documentation/hardware/camera/-->
+  <!--
   <gazebo reference="camera_rgb_frame">
     <sensor type="camera" name="Pi Camera">
       <always_on>true</always_on>
@@ -188,5 +191,6 @@
       </plugin>
     </sensor>
   </gazebo>
+  -->
 
 </robot>
