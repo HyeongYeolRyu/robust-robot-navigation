@@ -5,6 +5,7 @@ target/
 /devel/
 src/spinningup/log/
 .catkin_workspace
+/cmake-build-debug/
 
 # OS Files #
 .DS_Store
