@@ -41,17 +41,17 @@ class ReplayBuffer:
                      done=self.done_buf[idxs])
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
 
-import torch.nn as nn
-def init_weights(m):
-    if type(m) == nn.Linear:
-        torch.nn.init.xavier_uniform(m.weight)
-        m.bias.data.fill_(0.01)
+# import torch.nn as nn
+# def init_weights(m):
+#     if type(m) == nn.Linear:
+#         torch.nn.init.xavier_uniform(m.weight)
+#         m.bias.data.fill_(0.01)
 
 def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
-         steps_per_epoch=1000, epochs=10000, replay_size=int(5e4), gamma=0.99,
-         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=1000,
-         update_after=500, update_every=500, act_noise=0.05, num_test_episodes=1,
-         max_ep_len=500, logger_kwargs=dict(), save_freq=1):
+         steps_per_epoch=2000, epochs=10000, replay_size=int(1e5), gamma=0.99,
+         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=2000,
+         update_after=1000, update_every=1000, act_noise=0.05, num_test_episodes=1,
+         max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     """
     Deep Deterministic Policy Gradient (DDPG)
 
@@ -151,7 +151,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
     # Create actor-critic module and target networks
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
-    ac.apply(init_weights)
+    # ac.apply(init_weights)
     ac_targ = deepcopy(ac)
     ac.eval()  # in-active training BN
     print(f"[MODEL] Actor_Critic: {ac}")
@@ -282,7 +282,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
         # Step the env
         o2, r, d, info = env.step(a)
         # print(f"O {o[-4:]} |A {a} |O2 {o2[-4:]} |R {r} |D {d} |Info {info}")
-        print(f"                    ------------------> R: {r:.3f}")
+        print(f"          ------------------> R: {r:.3f}")
         ep_ret += r
         ep_len += 1
 
@@ -328,8 +328,8 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             epoch = (t+1) // steps_per_epoch
 
             # Save model
-            # if (epoch % save_freq == 0) or (epoch == epochs):
-                # logger.save_state({'env': env}, None)
+            if (epoch % save_freq == 0) or (epoch == epochs):
+                logger.save_state({'env': env}, None)
 
             # Test the performance of the deterministic version of the agent.
             test_agent()

@@ -419,8 +419,8 @@ class env(core.Env):
             # target.model_name = 'target'  # the same with sdf name
             # target.model_xml = goal_urdf
             offset_from_wall = 5
-            self.goal_position.position.x = random.uniform(5 + offset_from_wall, 25 - offset_from_wall)
-            self.goal_position.position.y = random.uniform(5 + offset_from_wall, 25 - offset_from_wall)
+            self.goal_position.position.x = random.uniform(5 + offset_from_wall, 22 - offset_from_wall)
+            self.goal_position.position.y = random.uniform(5 + offset_from_wall, 22 - offset_from_wall)
             # self.goal_position.position.x = 20 - 2.5
             # self.goal_position.position.y = 15 - 2.5
 
