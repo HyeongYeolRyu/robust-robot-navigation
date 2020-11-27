@@ -36,7 +36,7 @@ class env(core.Env):
         # Sensor specification
         self.sensor_range = 4
         self.sensor_timeout = 0.5
-        self.sensor_dim = 10  # 480
+        self.sensor_dim = 480
 
         # Sensor visualization
         self.visualize_scan_obs = False

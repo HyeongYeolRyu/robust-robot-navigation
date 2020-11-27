@@ -44,10 +44,10 @@ if __name__ == '__main__':
     file_xml = open(actor_model_file)
     xml_string = file_xml.read()
 
-    # print("Waiting for gazebo services...")
-    # rospy.wait_for_service("gazebo/spawn_sdf_model")
-    # spawn_model = rospy.ServiceProxy("gazebo/spawn_sdf_model", SpawnModel)
-    # print("service: spawn_sdf_model is available ....")
-    # rospy.Subscriber("/pedsim_simulator/simulated_agents", AgentStates, actor_poses_callback)
+    print("Waiting for gazebo services...")
+    rospy.wait_for_service("gazebo/spawn_sdf_model")
+    spawn_model = rospy.ServiceProxy("gazebo/spawn_sdf_model", SpawnModel)
+    print("service: spawn_sdf_model is available ....")
+    rospy.Subscriber("/pedsim_simulator/simulated_agents", AgentStates, actor_poses_callback)
 
     rospy.spin()

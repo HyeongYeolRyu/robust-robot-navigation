@@ -30,7 +30,7 @@ class MLPActor(nn.Module):
 
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation, act_mean, act_std):
         super().__init__()
-        self.scan_dim = 10
+        self.scan_dim = 480
         self.state_dim = 6
         self.fc1 = nn.Linear(self.scan_dim, 512)
         self.bn1 = nn.BatchNorm1d(512)
@@ -92,7 +92,7 @@ class MLPQFunction(nn.Module):
 
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
         super().__init__()
-        self.scan_dim = 10
+        self.scan_dim = 480
         self.state_dim = 6
         self.fc1 = nn.Linear(self.scan_dim, 512)
         self.bn1 = nn.BatchNorm1d(512)

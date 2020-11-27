@@ -148,7 +148,7 @@ Visualization Manager:
           Z offset:
             Use Z position from message: false
             Value: 0
-      Enabled: true
+      Enabled: false
       Name: Tracking-Visuals
     - Alpha: 1
       Axes Length: 1
