@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
-import os
 import rospy
 import numpy as np
 import matplotlib.pyplot as plt
 import math
 import random
 from gym import core, spaces
-
 from geometry_msgs.msg import Twist, Pose, PointStamped, PoseStamped
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
 from gazebo_msgs.srv import SpawnModel, DeleteModel
-
-
-# diagonal_dis = math.sqrt(2) * (3.6 + 3.8)
-# goal_model_dir = os.path.join(os.path.split(os.path.realpath(__file__))[0], '..', '..', 'turtlebot3_simulations',
-#                               'turtlebot3_gazebo', 'models', 'Target', 'model.sdf')
 
 
 class env(core.Env):
@@ -37,12 +30,16 @@ class env(core.Env):
         self.sensor_range = 4
         self.sensor_timeout = 0.5
         self.sensor_dim = 480
+        self.stack_size = 30
+        self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
+        self.use_stacked_scan_obs = True
 
         # Sensor visualization
         self.visualize_scan_obs = False
         self.visualize_stacked_scan_obs = False
         self.vis_window = None
-        self.visualize_y_axis_size = 100
+        self.visualize_y_axis_size = 30
+        self.plt_pause_time = 0.0000000001
 
         # Robot state
         self.position = Pose()
@@ -51,19 +48,15 @@ class env(core.Env):
         self.robot_scan = np.zeros(self.sensor_dim)
         self.robot_state_init = False
         self.robot_scan_init = False
-        self.stack_size = 30
-        self.stacked_scan_obs = np.full((self.stack_size, self.sensor_dim), self.sensor_range)
         self.robot_position = PoseStamped()
         self.past_action = np.array([0., 0.])
         self.pitch = 0.
         self.simulation_speed = 1  # normal_speed
         self.sleep_time = 0.01 * self.simulation_speed
-        self.past_state = np.concatenate((np.full(self.sensor_dim, self.sensor_range),
-                                          np.array([0, 0, 0, 0]))
-                                        )
         self.past_reward = 0
         self.past_info = {'is_arrive': False}
         self.init_position = [0, 0]
+        self.state_dim = 6
 
         # Input state
         self.past_distance = 0.
@@ -72,8 +65,10 @@ class env(core.Env):
         # Goal position
         self.goal_position.position.x = 0.
         self.goal_position.position.y = 0.
+
         # Goal arrival threshold
-        self.threshold_arrive = 0.7
+        self.threshold_arrive = 0.6
+        self.diagonal_dis = 15
 
         # Service
         self.reset_proxy = rospy.ServiceProxy('gazebo/reset_simulation', Empty)
@@ -101,19 +96,27 @@ class env(core.Env):
 
         self._generate_goal()
 
-        state = self.reset()
+        # state = self.reset()
         self.pub_cmd_vel.publish(Twist())
         self.act_limit_max = np.array([0.25, 0.5])
         self.act_limit_min = np.array([0.0, -0.5])
-        self.action_space = spaces.Box(self.act_limit_min, self.act_limit_max, dtype='float32') 
-        self.observation_space = spaces.Box(-np.inf, np.inf, shape=state.shape, dtype='float32')
+        self.action_space = spaces.Box(self.act_limit_min, self.act_limit_max, dtype='float32')
+
+        if self.use_stacked_scan_obs:
+            self.past_state = self.stacked_scan_obs + [0, 0, 0, 0]
+            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(self.stack_size * self.sensor_dim + self.state_dim, ), dtype='float32')
+        else:
+            self.past_state = np.concatenate((np.full(self.sensor_dim, self.sensor_range),
+                                          np.array([0, 0, 0, 0]))
+                                        )
+            self.observation_space = spaces.Box(-np.inf, np.inf, shape=(self.sensor_dim + self.state_dim, ), dtype='float32')
 
     def _get_goal_distance(self):
         goal_distance = 0.
         while True:
             try:
                 goal_distance = math.sqrt((self.goal_position.position.x - self.position.x)**2 + 
-                                           (self.goal_position.position.y - self.position.y)**2)
+                                          (self.goal_position.position.y - self.position.y)**2)
                 self.past_distance = goal_distance
                 break
             except Exception as e:
@@ -197,19 +200,22 @@ class env(core.Env):
             print("==============================================================================================")
             done = True
 
-        if self.visualize_scan_obs:
-            scan_obs = np.expand_dims(np.array(scan_range), axis=0)
-            scan_obs = np.repeat(scan_obs, self.visualize_y_axis_size, axis=0)
-            scan_obs = np.fliplr(scan_obs)
-            self.vis_window.set_data(scan_obs)
-            plt.pause(0.0000000001)
-            plt.draw()
-
-        if self.visualize_stacked_scan_obs:
-            self._stack_scan_obs(np.array(scan_range)[::-1])
-            self.vis_window.set_data(self.stacked_scan_obs)
-            plt.pause(0.0000000001)
-            plt.draw()
+        # if self.visualize_scan_obs:
+        #     scan_obs = np.expand_dims(np.array(scan_range), axis=0)
+        #     scan_obs = np.repeat(scan_obs, self.visualize_y_axis_size, axis=0)
+        #     scan_obs = np.fliplr(scan_obs)
+        #     self.vis_window.set_data(scan_obs)
+        #     plt.pause(0.0000000001)
+        #     plt.draw()
+        #
+        # if self.visualize_stacked_scan_obs:
+        #     self.stacked_scan_obs[self.sensor_dim:] = self.stacked_scan_obs[:-self.sensor_dim]
+        #     self.stacked_scan_obs[:self.sensor_dim] = obs
+        #     self._stack_scan_obs(scan_range[::-1])
+        #     stacked_scan_obs_2d = self.stacked_scan_obs.reshape(self.stack_size, self.sensor_dim)
+        #     self.vis_window.set_data(stacked_scan_obs_2d)
+        #     plt.pause(0.0000000001)
+        #     plt.draw()
 
         rel_dist = math.sqrt((self.goal_position.position.x - self.position.x)**2 +
                               (self.goal_position.position.y - self.position.y)**2)
@@ -222,10 +228,10 @@ class env(core.Env):
             arrive = True
 
         if abs(self.pitch) > math.degrees(180):
-            print("======================================================")
+            print("==============================================================================================")
             print("Fall down!")
-            print("pitch value: {}".format(self.pitch))
-            print("======================================================")
+            print("Pitch value: {}".format(self.pitch))
+            print("==============================================================================================")
             done = True
             arrive = False
 
@@ -284,21 +290,28 @@ class env(core.Env):
 
         try:
             data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
-            state, rel_dist, yaw, rel_angle, diff_angle, done, arrive = self._process_scan_obs(data)
-            state = [i / self.sensor_range for i in state]
-            for pa in self.past_action:
-                state.append(pa)
-            self.past_action = action
-            state = state + [rel_dist / 15,
+            scan, rel_dist, yaw, rel_angle, diff_angle, done, arrive = self._process_scan_obs(data)
+            state = [i / self.sensor_range for i in scan]
+
+            if self.use_stacked_scan_obs:
+                state = self._stack_scan_obs(state)
+
+            self._visualize_sensor(scan)
+
+            # for pa in self.past_action:
+            #     state.append(pa)
+
+            state = state + [self.past_action[0], self.past_action[1],
+                             rel_dist / self.diagonal_dis,
                              rel_angle / 360,
                              yaw / 360,
                              diff_angle / 180]
-
             reward = self._compute_reward(done, arrive)
 
             info = {
                 'is_arrive': arrive
             }
+            self.past_action = action
             self.past_state = state
             self.past_reward = reward
             self.past_info = info
@@ -332,7 +345,7 @@ class env(core.Env):
         print("==============================================================================================")
 
         # 0. Initialize stacked_scan_obs
-        self.stacked_scan_obs = np.full((self.stack_size, self.sensor_dim), self.sensor_range)
+        self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
 
         # 1. Unpause gazebo
         self._unpause_gazebo()
@@ -366,13 +379,17 @@ class env(core.Env):
             # self.goal_distance = 0.
 
             scan, rel_dist, yaw, rel_angle, diff_angle, done, arrive = self._process_scan_obs(data)
-
             state = [i / self.sensor_range for i in scan]  # Normalize scan data
 
+            if self.use_stacked_scan_obs:
+                state = self._stack_scan_obs(state)
+
+            if self.visualize_scan_obs or self.visualize_stacked_scan_obs:
+                self._visualize_sensor(scan)
+
             # Past action: Initially, linear & angular velocity: 0, 0
-            state.append(0)
-            state.append(0)
-            state = state + [rel_dist,  # Relative distance to goal
+            state = state + [0, 0,
+                             rel_dist / self.diagonal_dis,  # Relative distance to goal
                              rel_angle / 360,  # Relative angle to goal
                              yaw / 360,  # Current yaw of robot
                              diff_angle / 180]
@@ -434,8 +451,27 @@ class env(core.Env):
             print("/gazebo/failed to generate the target: {}".format(e))
 
     def _stack_scan_obs(self, obs):
-        self.stacked_scan_obs[1:] = self.stacked_scan_obs[:-1]
-        self.stacked_scan_obs[:1] = obs
+        self.stacked_scan_obs[self.sensor_dim:] = self.stacked_scan_obs[:-self.sensor_dim]
+        self.stacked_scan_obs[:self.sensor_dim] = obs
+        return self.stacked_scan_obs
+
+    def _visualize_sensor(self, scan):
+        if self.visualize_scan_obs:
+            scan_obs = np.expand_dims(np.array(scan), axis=0)
+            scan_obs = np.repeat(scan_obs, self.visualize_y_axis_size, axis=0)
+            scan_obs = np.fliplr(scan_obs)
+            self.vis_window.set_data(scan_obs)
+            plt.pause(self.plt_pause_time)
+            plt.draw()
+
+        if self.visualize_stacked_scan_obs:
+            stacked_scan_obs_2d = np.zeros((self.stack_size, self.sensor_dim))
+            for i in range(self.stack_size):
+                stacked_scan_obs_2d[i] = self.stacked_scan_obs[self.sensor_dim*i : self.sensor_dim*(i+1)][::-1]
+            stacked_scan_obs_2d = stacked_scan_obs_2d * self.sensor_range  # Multiplying 4 makes back to the original sensor data (before it, we normalized)
+            self.vis_window.set_data(stacked_scan_obs_2d)
+            plt.pause(self.plt_pause_time)
+            plt.draw()
 
     ##########################################################################################################
     #                                           UNUSED
