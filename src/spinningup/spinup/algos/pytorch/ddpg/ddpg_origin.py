@@ -6,7 +6,7 @@ import gym
 import time
 import datetime
 import rospy
-import spinup.algos.pytorch.ddpg.core as core
+import spinup.algos.pytorch.ddpg.core_ourModel as core
 from spinup.utils.logx import EpochLogger
 
 
@@ -300,14 +300,11 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
         # End of trajectory handling
         if d or (ep_len == max_ep_len):
-            env.pause_pedsim()
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, ep_ret, ep_len = env.reset(), 0, 0
-            env.unpause_pedsim()
 
         # Update handling
         if t >= update_after and t % update_every == 0:
-            env.pause_pedsim()
             ac.train()  # active training BN
             ac_targ.train()
             if torch.cuda.is_available():
@@ -325,7 +322,6 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             if torch.cuda.is_available():
                 ac.cpu()
                 ac_targ.cpu()
-            env.unpause_pedsim()
 
         # End of epoch handling
         if (t+1) % steps_per_epoch == 0:
@@ -341,6 +337,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
             sec = time.time() - start_time
             elapsed_time = str(datetime.timedelta(seconds=sec)).split('.')[0]
+
 
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)

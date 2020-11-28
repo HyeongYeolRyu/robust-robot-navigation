@@ -1,6 +1,18 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+def combined_shape(length, shape=None):
+    if shape is None:
+        return (length,)
+    return (length, shape) if np.isscalar(shape) else (length, *shape)
+
+
+def count_vars(module):
+    return sum([np.prod(p.shape) for p in module.parameters()])
+
 
 """ sinusoid position embedding """
 def get_sinusoid_encoding_table(n_seq, d_hidn):
@@ -10,7 +22,7 @@ def get_sinusoid_encoding_table(n_seq, d_hidn):
         return [cal_angle(position, i_hidn) for i_hidn in range(d_hidn)]
 
     sinusoid_table = np.array([get_posi_angle_vec(i_seq) for i_seq in range(n_seq)])
-    sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # even index sin 
+    sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # even index sin
     sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # odd index cos
 
     return sinusoid_table
@@ -79,7 +91,7 @@ class Nav2dEmbeddingNetwork(nn.Module):
         self.relu = nn.ReLU(True)
 
     def forward(self, obs): # (in) obs: Tensor (dim:[-1,14406])
-        if self.partition == True:  
+        if self.partition == True:
             if obs.is_cuda:
                 self.pos_encoding = self.pos_encoding.cuda()
             else:
@@ -96,8 +108,8 @@ class Nav2dEmbeddingNetwork(nn.Module):
             sensor_obs = self.relu(self.fc1(sensor_obs))                                       # Bx600
         else:                                                                              #----- partition ------
             sensor_obs = torch.cat([sensor_obs,self.pos_encoding], dim=1)                      # Bx2x30x480
-            split_set = []                                                                     
-            for i in range(self.n_partition):      
+            split_set = []
+            for i in range(self.n_partition):
                 split_set.append(sensor_obs[:,:,:,self.part_dim*i:self.part_dim*(i+1)])        # Bx2x30x60
             for i in range(self.n_partition):
                 split_set[i] = self.conv_block1(split_set[i])                                  # Bx32x14x28
@@ -173,26 +185,20 @@ class Nav2dActorCritic(nn.Module):
             return self.pi(obs).numpy()
 
 
-import matplotlib.pyplot as plt
-import numpy as np
 if __name__ == '__main__':
     print("===============2d AC=================")
     ac = Nav2dActorCritic()
     print(ac)
     batch_size = 5
     input_channel = 1
-
     sensor_obs = torch.randn(batch_size, input_channel, 30, 480)
     sensor_obs = sensor_obs.reshape(-1,14400)
     robot_state = torch.randn(batch_size, 6)
-
     obs = torch.cat((sensor_obs,robot_state),1)
     print(obs.size())
-
     out = ac.act(obs)
     print(out)
     print(out.shape)
-
     print("===============CUDA Test=================")
     obs = torch.cat((sensor_obs,robot_state),1).cuda()
     print(obs.size())
@@ -200,23 +206,19 @@ if __name__ == '__main__':
     out = ac.pi(obs)
     print(out)
     print(out.shape)
-
     print("===============partition=================")
     ac = Nav2dActorCritic(partition=True)
     print(ac)
     batch_size = 5
     input_channel = 1
-
     sensor_obs = torch.randn(batch_size, input_channel, 30, 480)
     sensor_obs = sensor_obs.reshape(-1,14400)
     robot_state = torch.randn(batch_size, 6)
     obs = torch.cat((sensor_obs,robot_state),1)
     print(obs.size())
-
     out = ac.act(obs)
     print(out)
     print(out.shape)
-    
     print("===============CUDA Test=================")
     obs = torch.cat((sensor_obs,robot_state),1).cuda()
     print(obs.size())

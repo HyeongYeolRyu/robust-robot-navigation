@@ -32,7 +32,7 @@ class env(core.Env):
         self.sensor_dim = 480
         self.stack_size = 30
         self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
-        self.use_stacked_scan_obs = True
+        self.use_stacked_scan_obs = False
 
         # Sensor visualization
         self.visualize_scan_obs = False
@@ -55,7 +55,7 @@ class env(core.Env):
         self.sleep_time = 0.01 * self.simulation_speed
         self.past_reward = 0
         self.past_info = {'is_arrive': False}
-        self.init_position = [0, 0]
+        self.init_position = [21, 7]
         self.state_dim = 6
 
         # Input state
@@ -76,6 +76,8 @@ class env(core.Env):
         self.unpause_proxy = rospy.ServiceProxy('gazebo/unpause_physics', Empty)
         self.goal = rospy.ServiceProxy('/gazebo/spawn_sdf_model', SpawnModel)
         self.del_model = rospy.ServiceProxy('/gazebo/delete_model', DeleteModel)
+        self.pause_pedsim = rospy.ServiceProxy('/pedsim_simulator/pause_simulation', Empty)
+        self.unpause_pedsim = rospy.ServiceProxy('/pedsim_simulator/unpause_simulation', Empty)
 
         # Publisher
         self.pub_cmd_vel = rospy.Publisher('cmd_vel', Twist, queue_size=1)
@@ -200,23 +202,6 @@ class env(core.Env):
             print("==============================================================================================")
             done = True
 
-        # if self.visualize_scan_obs:
-        #     scan_obs = np.expand_dims(np.array(scan_range), axis=0)
-        #     scan_obs = np.repeat(scan_obs, self.visualize_y_axis_size, axis=0)
-        #     scan_obs = np.fliplr(scan_obs)
-        #     self.vis_window.set_data(scan_obs)
-        #     plt.pause(0.0000000001)
-        #     plt.draw()
-        #
-        # if self.visualize_stacked_scan_obs:
-        #     self.stacked_scan_obs[self.sensor_dim:] = self.stacked_scan_obs[:-self.sensor_dim]
-        #     self.stacked_scan_obs[:self.sensor_dim] = obs
-        #     self._stack_scan_obs(scan_range[::-1])
-        #     stacked_scan_obs_2d = self.stacked_scan_obs.reshape(self.stack_size, self.sensor_dim)
-        #     self.vis_window.set_data(stacked_scan_obs_2d)
-        #     plt.pause(0.0000000001)
-        #     plt.draw()
-
         rel_dist = math.sqrt((self.goal_position.position.x - self.position.x)**2 +
                               (self.goal_position.position.y - self.position.y)**2)
 
@@ -245,9 +230,10 @@ class env(core.Env):
 
         current_distance = math.sqrt((self.goal_position.position.x - self.position.x)**2 + 
                                      (self.goal_position.position.y - self.position.y)**2)
-        distance_rate = (self.past_distance - current_distance)
 
+        distance_rate = (self.past_distance - current_distance)
         r_distance = 300.*distance_rate
+
         self.past_distance = current_distance
 
         r_heading = -self.diff_angle/360
@@ -274,6 +260,7 @@ class env(core.Env):
 
     def step(self, action):
         self._unpause_gazebo()
+        # self.unpause_pedsim()
 
         linear_vel = action[0]
         ang_vel = action[1]
@@ -296,7 +283,8 @@ class env(core.Env):
             if self.use_stacked_scan_obs:
                 state = self._stack_scan_obs(state)
 
-            self._visualize_sensor(scan)
+            if self.visualize_scan_obs or self.visualize_stacked_scan_obs:
+                self._visualize_sensor(scan)
 
             # for pa in self.past_action:
             #     state.append(pa)
@@ -323,6 +311,7 @@ class env(core.Env):
             done = True
 
         self._pause_gazebo()
+        # self.pause_pedsim()
 
         return np.asarray(state), reward, done, info
 
@@ -349,6 +338,7 @@ class env(core.Env):
 
         # 1. Unpause gazebo
         self._unpause_gazebo()
+        # self.unpause_pedsim()
         # 2-1. Delete target
         rospy.wait_for_service('/gazebo/delete_model')
         # try:
@@ -363,6 +353,13 @@ class env(core.Env):
         except rospy.ServiceException as e:
             print("gazebo/reset_simulation service call failed: {}".format(e))
 
+        while True:
+            if abs(self.init_position[0] - self.position.x) < 0.1 and\
+               abs(self.init_position[1] - self.position.y) < 0.1:
+                break
+            # else:
+                # print("Resetting simulation...")
+
         # 3. Generate target
         self._generate_goal()
 
@@ -373,10 +370,6 @@ class env(core.Env):
         try:
             data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
             self.goal_distance = self._get_goal_distance()
-            # self.goal_distance = math.sqrt((self.goal_position.position.x - self.init_position[0])**2 +
-            #                                (self.goal_position.position.y - self.init_position[1])**2
-            # )
-            # self.goal_distance = 0.
 
             scan, rel_dist, yaw, rel_angle, diff_angle, done, arrive = self._process_scan_obs(data)
             state = [i / self.sensor_range for i in scan]  # Normalize scan data
@@ -410,6 +403,7 @@ class env(core.Env):
 
         # 5. Pause gazebo
         self._pause_gazebo()
+        # self.pause_pedsim()
 
         # 6. Return state
         return np.asarray(state)
