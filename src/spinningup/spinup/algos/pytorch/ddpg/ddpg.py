@@ -6,7 +6,7 @@ import gym
 import time
 import datetime
 import rospy
-import spinup.algos.pytorch.ddpg.core as core
+import spinup.algos.pytorch.ddpg.naive_model_n_stack_only_one as core
 from spinup.utils.logx import EpochLogger
 
 
@@ -29,8 +29,8 @@ class ReplayBuffer:
         self.act_buf[self.ptr] = act
         self.rew_buf[self.ptr] = rew
         self.done_buf[self.ptr] = done
-        self.ptr = (self.ptr+1) % self.max_size
-        self.size = min(self.size+1, self.max_size)
+        self.ptr = (self.ptr + 1) % self.max_size
+        self.size = min(self.size + 1, self.max_size)
 
     def sample_batch(self, batch_size=32):
         idxs = np.random.randint(0, self.size, size=batch_size)
@@ -39,15 +39,10 @@ class ReplayBuffer:
                      act=self.act_buf[idxs],
                      rew=self.rew_buf[idxs],
                      done=self.done_buf[idxs])
-        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
-# import torch.nn as nn
-# def init_weights(m):
-#     if type(m) == nn.Linear:
-#         torch.nn.init.xavier_uniform(m.weight)
-#         m.bias.data.fill_(0.01)
 
-def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
+def ddpg(env_fn, actor_critic=core.Nav2dActorCritic, ac_kwargs=dict(), seed=1,
          steps_per_epoch=2000, epochs=10000, replay_size=int(1e5), gamma=0.99,
          polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=2000,
          update_after=1000, update_every=1000, act_noise=0.05, num_test_episodes=1,
@@ -165,7 +160,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
     # Count variables (protip: try to get a feel for how different size networks behave!)
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.q])
-    logger.log('\nNumber of parameters: \t pi: %d, \t q: %d\n'%var_counts)
+    logger.log('\nNumber of parameters: \t pi: %d, \t q: %d\n' % var_counts)
 
     # Set up function for computing DDPG Q-loss
     def compute_loss_q(data):
@@ -181,7 +176,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             backup = r + gamma * (1 - d) * q_pi_targ
 
         # MSE loss against Bellman backup
-        loss_q = ((q - backup)**2).mean()
+        loss_q = ((q - backup) ** 2).mean()
 
         # Useful info for logging
         loss_info = dict(QVals=q.cpu().detach().numpy())
@@ -248,7 +243,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = env.reset(), False, 0, 0
             # while not(d or (ep_len == max_ep_len)):
-            while not(d or (ep_len == 100)):
+            while not (d or (ep_len == 100)):
                 # Take deterministic actions at test time (noise_scale=0)
                 a = get_action(o, 0)
                 print(f"[Eval] a: {a}")
@@ -264,7 +259,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
-        
+
         # Until start_steps have elapsed, randomly sample actions
         # from a uniform distribution for better exploration. Afterwards, 
         # use the learned policy (with some noise, via act_noise).
@@ -328,8 +323,8 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             env.unpause_pedsim()
 
         # End of epoch handling
-        if (t+1) % steps_per_epoch == 0:
-            epoch = (t+1) // steps_per_epoch
+        if (t + 1) % steps_per_epoch == 0:
+            epoch = (t + 1) // steps_per_epoch
 
             # Save model
             if (epoch % save_freq == 0) or (epoch == epochs):
@@ -339,6 +334,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             test_agent()
             o, d, ep_ret, ep_len = env.reset(), False, 0, 0
 
+            # Transform human-readable time
             sec = time.time() - start_time
             elapsed_time = str(datetime.timedelta(seconds=sec)).split('.')[0]
 
@@ -359,6 +355,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
 if __name__ == '__main__':
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
     parser.add_argument('--hid', type=int, default=256)
@@ -370,9 +367,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
+
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
 
-    ddpg(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
-         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), 
+    ddpg(lambda: gym.make(args.env), actor_critic=core.MLPActorCritic,
+         ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
          gamma=args.gamma, seed=args.seed, epochs=args.epochs,
          logger_kwargs=logger_kwargs)

@@ -1,12 +1,23 @@
 import torch
 import torch.nn as nn
-import numpy as np
+import torch.nn.functional as F
 
 
 def combined_shape(length, shape=None):
     if shape is None:
         return (length,)
     return (length, shape) if np.isscalar(shape) else (length, *shape)
+
+
+def mlp(sizes, activation, output_activation=nn.Identity):
+    layers =[]
+    for j in range(len(sizes)-1):
+        act = activation if j < len(sizes)-2 else output_activation
+        if j < len(sizes)-2:
+            layers += [nn.Linear(sizes[j], sizes[j+1]), nn.BatchNorm1d(sizes[j+1]), act()]
+        else:
+            layers += [nn.Linear(sizes[j], sizes[j+1]), act()]
+    return nn.Sequential(*layers)
 
 
 def count_vars(module):
@@ -21,11 +32,18 @@ def get_sinusoid_encoding_table(n_seq, d_hidn):
         return [cal_angle(position, i_hidn) for i_hidn in range(d_hidn)]
 
     sinusoid_table = np.array([get_posi_angle_vec(i_seq) for i_seq in range(n_seq)])
-    sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # even index sin 
+    sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # even index sin
     sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # odd index cos
 
     return sinusoid_table
 
+    # print (pos_encoding.shape)
+    # plt.pcolormesh(pos_encoding, cmap='RdBu')
+    # plt.xlabel('Depth')
+    # plt.xlim((0, d_hidn))
+    # plt.ylabel('Position')
+    # plt.colorbar()
+    # plt.show()
 
 class ConvBlock(nn.Module):
     def __init__(self,
@@ -34,22 +52,28 @@ class ConvBlock(nn.Module):
                  kernel_h,
                  kernel_w,
                  stride_h,
-                 stride_w):
+                 stride_w,
+                 padding_h=0,
+                 padding_w=0):
         super(ConvBlock, self).__init__()
 
         self.conv = nn.Conv2d(
             in_channels, out_channels,
-            (kernel_h, kernel_w), (stride_h, stride_w), bias=False
+            (kernel_h, kernel_w),
+            (stride_h, stride_w),
+            (padding_h, padding_w),
+            bias=False
         )
         self.relu = nn.ReLU(inplace=True)
         self.batchnorm = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.batchnorm(x) # TODO: check
+        x = self.batchnorm(x)  # TODO: check
         x = self.relu(x)
 
         return x
+
 
 
 class Nav2dEmbeddingNetwork(nn.Module):
@@ -61,12 +85,29 @@ class Nav2dEmbeddingNetwork(nn.Module):
         self.partition = partition
         self.state_dim = state_dim
 
-        if not self.partition:
-            self.conv_block1 = ConvBlock(1, 32, 3, 40, 2, 4)
-            self.maxpool2d = nn.MaxPool2d((1, 3), (1, 3))
-            self.conv_block2 = ConvBlock(32, 64, 3, 3, 2, 3)
-            self.flatten = nn.Flatten()
-            self.fc1 = nn.Linear(4608, 600)
+        if self.partition == False:
+            if n_stack == 30:
+                self.conv_block1 = ConvBlock(1, 32, 3, 40, 2, 4)
+                self.maxpool2d = nn.MaxPool2d((1, 3), (1, 3))
+                self.conv_block2 = ConvBlock(32, 64, 3, 3, 2, 3)
+                self.flatten = nn.Flatten()
+                self.fc1 = nn.Linear(4608, 600)
+            elif n_stack == 3:
+                self.conv_block1 = ConvBlock(1, 32, 3, 40, 1, 4)
+                self.maxpool2d = nn.MaxPool2d((1, 3), (1, 3))
+                self.conv_block2 = ConvBlock(32, 64, 1, 3, 1, 3)
+                self.flatten = nn.Flatten()
+                self.fc1 = nn.Linear(768, 600)
+            elif n_stack == 1:
+                self.conv_block1 = ConvBlock(1, 32, 1, 5, 1, 2, 0, 2)
+                # self.maxpool2d = nn.MaxPool2d((1, 3), (1, 3))
+                self.conv_block2 = ConvBlock(32, 64, 1, 5, 1, 2, 0, 2)
+                self.conv_block3 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2)
+                self.conv_block4 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2)
+                self.conv_block5 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2)
+                self.avg_pool = nn.AvgPool2d((1, 15))
+                self.fc2 = nn.Linear(6, 64)
+                self.fc3 = nn.Linear(64, 64)
         else:
             self.n_partition = 8
             self.part_dim = (self.sensor_dim//self.n_partition)
@@ -78,27 +119,39 @@ class Nav2dEmbeddingNetwork(nn.Module):
             self.conv_block3 = ConvBlock(64, 64, 3, 5, 2, 2)
             self.flatten = nn.Flatten()
             self.fc1 = nn.Linear(4096, 600)
+            self.fc2 = nn.Linear(6, 600)
 
-        self.fc2 = nn.Linear(6, 600)
         self.relu = nn.ReLU(True)
 
-    def forward(self, obs):  # (in) obs: Tensor (dim:[-1,14406])
-        if self.partition:
+    def forward(self, obs): # (in) obs: Tensor (dim:[-1,14406])
+        if self.partition == True:
             if obs.is_cuda:
                 self.pos_encoding = self.pos_encoding.cuda()
             else:
                 self.pos_encoding = self.pos_encoding.cpu()
 
-        sensor_obs = obs[:, :-6].reshape(-1, self.n_channel, self.n_stack, self.sensor_dim)    # Bx1x30x480
-        robot_state = obs[:, -6:]                                                              # Bx6
+        sensor_obs = obs[:,:-6].reshape(-1,self.n_channel,self.n_stack,self.sensor_dim)    # Bx1x30x480
+        robot_state = obs[:,-6:]                                                           # Bx6
 
-        if not self.partition:                                                             # -----No partition-----
+        if self.partition == False:                                                        #-----No partition-----
             sensor_obs = self.conv_block1(sensor_obs)                                          # Bx32x14x111
-            sensor_obs = self.maxpool2d(sensor_obs)                                            # Bx32x14x37
+            # sensor_obs = self.maxpool2d(sensor_obs)                                            # Bx32x14x37
+            print(sensor_obs.size())
             sensor_obs = self.conv_block2(sensor_obs)                                          # Bx64x6x12
-            sensor_obs = self.flatten(sensor_obs)                                              # Bx4608
-            sensor_obs = self.relu(self.fc1(sensor_obs))                                       # Bx600
-        else:                                                                              # ----- partition ------
+            print(sensor_obs.size())
+            sensor_obs = self.conv_block3(sensor_obs)
+            print(sensor_obs.size())
+            sensor_obs = self.conv_block4(sensor_obs)
+            print(sensor_obs.size())
+            sensor_obs = self.conv_block5(sensor_obs)
+            print(sensor_obs.size())
+
+            # sensor_obs = self.flatten(sensor_obs)                                              # Bx4608
+            # print(sensor_obs.size())
+            # sensor_obs = self.relu(self.fc1(sensor_obs))                                       # Bx600
+            sensor_obs = self.avg_pool(sensor_obs).squeeze()
+            print(sensor_obs.size())
+        else:                                                                              #----- partition ------
             sensor_obs = torch.cat([sensor_obs,self.pos_encoding], dim=1)                      # Bx2x30x480
             split_set = []
             for i in range(self.n_partition):
@@ -113,6 +166,7 @@ class Nav2dEmbeddingNetwork(nn.Module):
             sensor_obs = self.relu(self.fc1(sensor_obs))                                       # Bx600
 
         robot_state = self.relu(self.fc2(robot_state))                                     # Bx600
+        robot_state = self.relu(self.fc3(robot_state))
 
         out = torch.cat([sensor_obs, robot_state], dim=1)
         return out                                                                         # Bx1200
@@ -125,7 +179,7 @@ class Nav2dActorNetwork(nn.Module):
         self.act_std = torch.Tensor(act_std)
 
         self.embedding_network = Nav2dEmbeddingNetwork(partition=partition)
-        self.fc1 = nn.Linear(1200, 512)
+        self.fc1 = nn.Linear(128, 512)
         self.bn1 = nn.BatchNorm1d(512)
         # self.lstm = nn.LSTM()
         self.fc2 = nn.Linear(512, 2)
@@ -147,7 +201,7 @@ class Nav2dCriticNetwork(nn.Module):
         super(Nav2dCriticNetwork, self).__init__()
 
         self.embedding_network = Nav2dEmbeddingNetwork()
-        self.fc1 = nn.Linear(1202, 512)
+        self.fc1 = nn.Linear(130, 512)
         # self.lstm = nn.LSTM()
         self.fc2 = nn.Linear(512, 1)
         self.relu = nn.ReLU(True)
@@ -158,7 +212,6 @@ class Nav2dCriticNetwork(nn.Module):
         x = self.relu(self.fc1(x))
         out = self.fc2(x)
         return out
-
 
 class Nav2dActorCritic(nn.Module):
     def __init__(self,observation_space, action_space, partition=False):
@@ -178,6 +231,8 @@ class Nav2dActorCritic(nn.Module):
             return self.pi(obs).numpy()
 
 
+import matplotlib.pyplot as plt
+import numpy as np
 if __name__ == '__main__':
     print("===============2d AC=================")
     ac = Nav2dActorCritic()
@@ -219,7 +274,7 @@ if __name__ == '__main__':
     out = ac.act(obs)
     print(out)
     print(out.shape)
-
+    
     print("===============CUDA Test=================")
     obs = torch.cat((sensor_obs,robot_state),1).cuda()
     print(obs.size())

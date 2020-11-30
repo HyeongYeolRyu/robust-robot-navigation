@@ -148,7 +148,7 @@ Visualization Manager:
           Z offset:
             Use Z position from message: false
             Value: 0
-      Enabled: true
+      Enabled: false
       Name: Tracking-Visuals
     - Alpha: 1
       Axes Length: 1
@@ -244,25 +244,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 46.50993728637695
+      Distance: 31.113622665405273
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 16.817058563232422
-        Y: 9.588044166564941
+        X: 16.891765594482422
+        Y: 7.819568634033203
         Z: -1.5307257854146883e-5
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.3697965145111084
+      Pitch: 1.5647963285446167
       Target Frame: <Fixed Frame>
       Value: XYOrbit (rviz)
-      Yaw: 4.748562335968018
+      Yaw: 4.713562488555908
     Saved: ~
 Window Geometry:
   Displays:

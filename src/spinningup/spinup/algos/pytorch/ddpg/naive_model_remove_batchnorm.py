@@ -26,6 +26,13 @@ def get_sinusoid_encoding_table(n_seq, d_hidn):
 
     return sinusoid_table
 
+    # print (pos_encoding.shape)
+    # plt.pcolormesh(pos_encoding, cmap='RdBu')
+    # plt.xlabel('Depth')
+    # plt.xlim((0, d_hidn))
+    # plt.ylabel('Position')
+    # plt.colorbar()
+    # plt.show()
 
 class ConvBlock(nn.Module):
     def __init__(self,
@@ -42,11 +49,11 @@ class ConvBlock(nn.Module):
             (kernel_h, kernel_w), (stride_h, stride_w), bias=False
         )
         self.relu = nn.ReLU(inplace=True)
-        self.batchnorm = nn.BatchNorm2d(out_channels)
+        # self.batchnorm = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.batchnorm(x) # TODO: check
+        # x = self.batchnorm(x) # TODO: check
         x = self.relu(x)
 
         return x
@@ -61,7 +68,7 @@ class Nav2dEmbeddingNetwork(nn.Module):
         self.partition = partition
         self.state_dim = state_dim
 
-        if not self.partition:
+        if self.partition == False:
             self.conv_block1 = ConvBlock(1, 32, 3, 40, 2, 4)
             self.maxpool2d = nn.MaxPool2d((1, 3), (1, 3))
             self.conv_block2 = ConvBlock(32, 64, 3, 3, 2, 3)
@@ -82,26 +89,26 @@ class Nav2dEmbeddingNetwork(nn.Module):
         self.fc2 = nn.Linear(6, 600)
         self.relu = nn.ReLU(True)
 
-    def forward(self, obs):  # (in) obs: Tensor (dim:[-1,14406])
-        if self.partition:
+    def forward(self, obs): # (in) obs: Tensor (dim:[-1,14406])
+        if self.partition == True:  
             if obs.is_cuda:
                 self.pos_encoding = self.pos_encoding.cuda()
             else:
                 self.pos_encoding = self.pos_encoding.cpu()
 
-        sensor_obs = obs[:, :-6].reshape(-1, self.n_channel, self.n_stack, self.sensor_dim)    # Bx1x30x480
-        robot_state = obs[:, -6:]                                                              # Bx6
+        sensor_obs = obs[:,:-6].reshape(-1,self.n_channel,self.n_stack,self.sensor_dim)    # Bx1x30x480
+        robot_state = obs[:,-6:]                                                           # Bx6
 
-        if not self.partition:                                                             # -----No partition-----
+        if self.partition == False:                                                        #-----No partition-----
             sensor_obs = self.conv_block1(sensor_obs)                                          # Bx32x14x111
             sensor_obs = self.maxpool2d(sensor_obs)                                            # Bx32x14x37
             sensor_obs = self.conv_block2(sensor_obs)                                          # Bx64x6x12
             sensor_obs = self.flatten(sensor_obs)                                              # Bx4608
             sensor_obs = self.relu(self.fc1(sensor_obs))                                       # Bx600
-        else:                                                                              # ----- partition ------
+        else:                                                                              #----- partition ------
             sensor_obs = torch.cat([sensor_obs,self.pos_encoding], dim=1)                      # Bx2x30x480
-            split_set = []
-            for i in range(self.n_partition):
+            split_set = []                                                                     
+            for i in range(self.n_partition):      
                 split_set.append(sensor_obs[:,:,:,self.part_dim*i:self.part_dim*(i+1)])        # Bx2x30x60
             for i in range(self.n_partition):
                 split_set[i] = self.conv_block1(split_set[i])                                  # Bx32x14x28
@@ -126,7 +133,7 @@ class Nav2dActorNetwork(nn.Module):
 
         self.embedding_network = Nav2dEmbeddingNetwork(partition=partition)
         self.fc1 = nn.Linear(1200, 512)
-        self.bn1 = nn.BatchNorm1d(512)
+        # self.bn1 = nn.BatchNorm1d(512)
         # self.lstm = nn.LSTM()
         self.fc2 = nn.Linear(512, 2)
         self.relu = nn.ReLU(True)
@@ -134,7 +141,7 @@ class Nav2dActorNetwork(nn.Module):
 
     def forward(self, x):
         x = self.embedding_network(x)
-        x = self.relu(self.bn1(self.fc1(x)))
+        x = self.relu(self.fc1(x))
         out = self.tanh(self.fc2(x))
         if out.is_cuda:
             return (self.act_std.cuda() * out) + self.act_mean.cuda()
@@ -219,7 +226,7 @@ if __name__ == '__main__':
     out = ac.act(obs)
     print(out)
     print(out.shape)
-
+    
     print("===============CUDA Test=================")
     obs = torch.cat((sensor_obs,robot_state),1).cuda()
     print(obs.size())

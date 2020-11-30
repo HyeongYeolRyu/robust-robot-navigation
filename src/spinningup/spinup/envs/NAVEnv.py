@@ -30,15 +30,15 @@ class env(core.Env):
         self.sensor_range = 4
         self.sensor_timeout = 0.5
         self.sensor_dim = 480
-        self.stack_size = 30
+        self.stack_size = 1
         self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
-        self.use_stacked_scan_obs = False
+        self.use_stacked_scan_obs = True
 
         # Sensor visualization
         self.visualize_scan_obs = False
         self.visualize_stacked_scan_obs = False
         self.vis_window = None
-        self.visualize_y_axis_size = 30
+        self.visualize_y_axis_size = 1
         self.plt_pause_time = 0.0000000001
 
         # Robot state
@@ -85,8 +85,8 @@ class env(core.Env):
         self.pub_robot_position = rospy.Publisher('robot_position', PoseStamped, queue_size=1)
 
         # Subscriber
-        # self.sub_odom = rospy.Subscriber('odom', Odometry, self._get_odometry)
-        self.sub_odom = rospy.Subscriber('/ground_truth_pose', Odometry, self._get_odometry)
+        self.sub_odom = rospy.Subscriber('odom', Odometry, self._get_odometry)
+        # self.sub_odom = rospy.Subscriber('/ground_truth_pose', Odometry, self._get_odometry)
         # self.sub_robot_position = rospy.Subscriber('/ground_truth_pose', Odometry, self._get_gt_position_cb)
         # self.sub_model_state = rospy.Subscriber('gazebo/model_states', ModelStates, self._robot_state_cb)
         # self.sub_scan = rospy.Subscriber('scan', LaserScan, self._robot_scan_cb)
@@ -354,9 +354,12 @@ class env(core.Env):
             print("gazebo/reset_simulation service call failed: {}".format(e))
 
         while True:
-            if abs(self.init_position[0] - self.position.x) < 0.1 and\
-               abs(self.init_position[1] - self.position.y) < 0.1:
-                break
+            try:
+                if abs(self.init_position[0] - self.position.x) < 0.1 and\
+                   abs(self.init_position[1] - self.position.y) < 0.1:
+                    break
+            except:
+                pass
             # else:
                 # print("Resetting simulation...")
 
@@ -459,10 +462,9 @@ class env(core.Env):
             plt.draw()
 
         if self.visualize_stacked_scan_obs:
-            stacked_scan_obs_2d = np.zeros((self.stack_size, self.sensor_dim))
-            for i in range(self.stack_size):
-                stacked_scan_obs_2d[i] = self.stacked_scan_obs[self.sensor_dim*i : self.sensor_dim*(i+1)][::-1]
-            stacked_scan_obs_2d = stacked_scan_obs_2d * self.sensor_range  # Multiplying 4 makes back to the original sensor data (before it, we normalized)
+            stacked_scan_obs_2d = np.array(self.stacked_scan_obs[::-1]).reshape(self.stack_size, self.sensor_dim)
+            # Multiplying 4 makes back to the original sensor data (before it, we normalized)
+            stacked_scan_obs_2d = stacked_scan_obs_2d * self.sensor_range
             self.vis_window.set_data(stacked_scan_obs_2d)
             plt.pause(self.plt_pause_time)
             plt.draw()
