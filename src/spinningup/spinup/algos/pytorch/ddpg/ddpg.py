@@ -6,7 +6,7 @@ import gym
 import time
 import datetime
 import rospy
-import spinup.algos.pytorch.ddpg.naive_model_n_stack_only_one as core
+import spinup.algos.pytorch.ddpg.core as core
 from spinup.utils.logx import EpochLogger
 
 
@@ -42,9 +42,9 @@ class ReplayBuffer:
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
 
-def ddpg(env_fn, actor_critic=core.Nav2dActorCritic, ac_kwargs=dict(), seed=1,
+def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
          steps_per_epoch=2000, epochs=10000, replay_size=int(1e5), gamma=0.99,
-         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=2000,
+         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=256, start_steps=2000,
          update_after=1000, update_every=1000, act_noise=0.05, num_test_episodes=1,
          max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     """
@@ -308,7 +308,7 @@ def ddpg(env_fn, actor_critic=core.Nav2dActorCritic, ac_kwargs=dict(), seed=1,
             if torch.cuda.is_available():
                 ac.cuda()
                 ac_targ.cuda()
-            for _ in range(update_every):
+            for _ in range(update_every-500):
                 batch = replay_buffer.sample_batch(batch_size)
                 if torch.cuda.is_available():
                     for key, value in batch.items():

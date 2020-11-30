@@ -30,27 +30,15 @@ class MLPActor(nn.Module):
         super().__init__()
         self.scan_dim = 480
         self.state_dim = 6
-        # self.conv1 = nn.Conv1d(1, 32, 3, 1, 1)
-        # self.bn1 = nn.BatchNorm1d(32)
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.bn1 = nn.BatchNorm2d(32)
-
-        # self.conv2 = nn.Conv1d(32, 64, 3, 1, 1)
-        # self.bn2 = nn.BatchNorm1d(64)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.bn2 = nn.BatchNorm2d(64)
-
-        # self.conv3 = nn.Conv1d(64, 128, 3, 1, 1)
-        # self.bn3 = nn.BatchNorm1d(128)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.bn3 = nn.BatchNorm2d(128)
-
-        # self.conv4 = nn.Conv1d(128, 64, 1, 1, 0)
-        # self.bn4 = nn.BatchNorm1d(64)
-        self.conv4 = nn.Conv2d(128, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.bn4 = nn.BatchNorm2d(64)
-
-        self.avg_pool = nn.AvgPool2d((1, self.scan_dim))
+        self.conv1 = nn.Conv1d(1, 32, 3, 1, 1)
+        self.bn1 = nn.BatchNorm1d(32)
+        self.conv2 = nn.Conv1d(32, 64, 3, 1, 1)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.conv3 = nn.Conv1d(64, 128, 3, 1, 1)
+        self.bn3 = nn.BatchNorm1d(128)
+        self.conv4 = nn.Conv1d(128, 64, 1, 1, 0)
+        self.bn4 = nn.BatchNorm1d(64)
+        self.avg_pool = nn.AvgPool1d(self.scan_dim)
 
         self.fc1 = nn.Linear(self.state_dim, 64)
         self.bn5 = nn.BatchNorm1d(64)
@@ -68,18 +56,11 @@ class MLPActor(nn.Module):
     def forward(self, obs):
         obs = obs.unsqueeze(1)
         scan, state = obs[:, :, :self.scan_dim], obs[:, :, self.scan_dim:].squeeze(1)
-        scan = scan.unsqueeze(2)
-
-        # print("===================================================")
-        # print(f"Actor")
-        # print(f"scan: {scan.size()}")
-        # print(f"state: {state.size()}")
-        # print("===================================================")
         scan = F.relu(self.bn1(self.conv1(scan)))
         scan = F.relu(self.bn2(self.conv2(scan)))
         scan = F.relu(self.bn3(self.conv3(scan)))
         scan = F.relu(self.bn4(self.conv4(scan)))
-        scan = self.avg_pool(scan).squeeze(-1).squeeze(-1)
+        scan = self.avg_pool(scan).squeeze(2)
 
         state = F.relu(self.bn5(self.fc1(state)))
         state = F.relu(self.bn6(self.fc2(state)))
@@ -101,19 +82,11 @@ class MLPQFunction(nn.Module):
         self.scan_dim = 480
         self.state_dim = 6
 
-        #### Conv1D ####
-        # self.conv1 = nn.Conv1d(1, 32, 3, 1, 1)
-        # self.conv2 = nn.Conv1d(32, 64, 3, 1, 1)
-        # self.conv3 = nn.Conv1d(64, 128, 3, 1, 1)
-        # self.conv4 = nn.Conv1d(128, 64, 1, 1, 0)
-
-        #### Conv2D ####
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1))
-        self.conv4 = nn.Conv2d(128, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-
-        self.avg_pool = nn.AvgPool2d((1, self.scan_dim))
+        self.conv1 = nn.Conv1d(1, 32, 3, 1, 1)
+        self.conv2 = nn.Conv1d(32, 64, 3, 1, 1)
+        self.conv3 = nn.Conv1d(64, 128, 3, 1, 1)
+        self.conv4 = nn.Conv1d(128, 64, 1, 1, 0)
+        self.avg_pool = nn.AvgPool1d(self.scan_dim)
 
         self.fc1 = nn.Linear(self.state_dim + 2, 64)
         self.fc2 = nn.Linear(64, 64)
@@ -121,24 +94,13 @@ class MLPQFunction(nn.Module):
         self.fc4 = nn.Linear(128, 1)
 
     def forward(self, obs, act):
-        # print("===================================================")
-        # print(f"Obs in")
-        # print(f"obs: {obs.size()}")
-        # print("===================================================")
         obs = obs.unsqueeze(1)
         scan, state = obs[:, :, :self.scan_dim], obs[:, :, self.scan_dim:].squeeze(1)
-        scan = scan.unsqueeze(2)
         scan = F.relu(self.conv1(scan))
         scan = F.relu(self.conv2(scan))
         scan = F.relu(self.conv3(scan))
         scan = F.relu(self.conv4(scan))
-        scan = self.avg_pool(scan).squeeze(-1).squeeze(-1)
-
-        # print("===================================================")
-        # print(f"Q function")
-        # print(f"scan: {scan.size()}")
-        # print(f"state: {state.size()}")
-        # print("===================================================")
+        scan = self.avg_pool(scan).squeeze(2)
 
         state = torch.cat([state, act], dim=-1)
         state = F.relu(self.fc1(state))

@@ -273,7 +273,7 @@ class env(core.Env):
         self.pub_goal.publish(self.goal_point_stamped)  # Publish Goal position.
 
         # This should be included for processing the delay
-        # rospy.sleep(self.sleep_time)
+        rospy.sleep(0.001)
 
         try:
             data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)

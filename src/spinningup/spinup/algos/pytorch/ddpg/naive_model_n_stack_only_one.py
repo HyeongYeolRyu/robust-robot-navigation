@@ -54,7 +54,8 @@ class ConvBlock(nn.Module):
                  stride_h,
                  stride_w,
                  padding_h=0,
-                 padding_w=0):
+                 padding_w=0,
+                 bn=True):
         super(ConvBlock, self).__init__()
 
         self.conv = nn.Conv2d(
@@ -65,19 +66,21 @@ class ConvBlock(nn.Module):
             bias=False
         )
         self.relu = nn.ReLU(inplace=True)
-        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.bn = bn
+        if bn:
+            self.batchnorm = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.batchnorm(x)  # TODO: check
+        if self.bn:
+            x = self.batchnorm(x)  # TODO: check
         x = self.relu(x)
 
         return x
 
 
-
 class Nav2dEmbeddingNetwork(nn.Module):
-    def __init__(self, sensor_dim=480, n_stack=30, n_channel=1, partition=False, state_dim=6):
+    def __init__(self, sensor_dim=480, n_stack=1, n_channel=1, partition=False, state_dim=6, bn=True):
         super(Nav2dEmbeddingNetwork, self).__init__()
         self.sensor_dim = sensor_dim
         self.n_stack = n_stack
@@ -99,12 +102,12 @@ class Nav2dEmbeddingNetwork(nn.Module):
                 self.flatten = nn.Flatten()
                 self.fc1 = nn.Linear(768, 600)
             elif n_stack == 1:
-                self.conv_block1 = ConvBlock(1, 32, 1, 5, 1, 2, 0, 2)
+                self.conv_block1 = ConvBlock(1, 32, 1, 5, 1, 2, 0, 2, bn)
                 # self.maxpool2d = nn.MaxPool2d((1, 3), (1, 3))
-                self.conv_block2 = ConvBlock(32, 64, 1, 5, 1, 2, 0, 2)
-                self.conv_block3 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2)
-                self.conv_block4 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2)
-                self.conv_block5 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2)
+                self.conv_block2 = ConvBlock(32, 64, 1, 5, 1, 2, 0, 2, bn)
+                self.conv_block3 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2, bn)
+                self.conv_block4 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2, bn)
+                self.conv_block5 = ConvBlock(64, 64, 1, 5, 1, 2, 0, 2, bn)
                 self.avg_pool = nn.AvgPool2d((1, 15))
                 self.fc2 = nn.Linear(6, 64)
                 self.fc3 = nn.Linear(64, 64)
@@ -136,21 +139,16 @@ class Nav2dEmbeddingNetwork(nn.Module):
         if self.partition == False:                                                        #-----No partition-----
             sensor_obs = self.conv_block1(sensor_obs)                                          # Bx32x14x111
             # sensor_obs = self.maxpool2d(sensor_obs)                                            # Bx32x14x37
-            print(sensor_obs.size())
             sensor_obs = self.conv_block2(sensor_obs)                                          # Bx64x6x12
-            print(sensor_obs.size())
             sensor_obs = self.conv_block3(sensor_obs)
-            print(sensor_obs.size())
             sensor_obs = self.conv_block4(sensor_obs)
-            print(sensor_obs.size())
             sensor_obs = self.conv_block5(sensor_obs)
-            print(sensor_obs.size())
 
             # sensor_obs = self.flatten(sensor_obs)                                              # Bx4608
             # print(sensor_obs.size())
             # sensor_obs = self.relu(self.fc1(sensor_obs))                                       # Bx600
-            sensor_obs = self.avg_pool(sensor_obs).squeeze()
-            print(sensor_obs.size())
+            sensor_obs = self.avg_pool(sensor_obs).squeeze(3).squeeze(2)
+
         else:                                                                              #----- partition ------
             sensor_obs = torch.cat([sensor_obs,self.pos_encoding], dim=1)                      # Bx2x30x480
             split_set = []
@@ -200,7 +198,7 @@ class Nav2dCriticNetwork(nn.Module):
     def __init__(self):
         super(Nav2dCriticNetwork, self).__init__()
 
-        self.embedding_network = Nav2dEmbeddingNetwork()
+        self.embedding_network = Nav2dEmbeddingNetwork(bn=False)
         self.fc1 = nn.Linear(130, 512)
         # self.lstm = nn.LSTM()
         self.fc2 = nn.Linear(512, 1)
