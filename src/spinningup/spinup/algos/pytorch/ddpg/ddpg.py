@@ -6,8 +6,11 @@ import gym
 import time
 import datetime
 import rospy
-import spinup.algos.pytorch.ddpg.core as core
+import spinup.algos.pytorch.ddpg.core_conv2d_stacked as core
 from spinup.utils.logx import EpochLogger
+
+
+use_lstm = True
 
 
 class ReplayBuffer:
@@ -41,10 +44,20 @@ class ReplayBuffer:
                      done=self.done_buf[idxs])
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
+    def sample_seq_batch(self, batch_size=32):
+        first_idx = np.random.randint(0, self.size - batch_size, size=1)
+        idxs = np.array(first_idx, first_idx+batch_size)
+        batch = dict(obs=self.obs_buf[idxs],
+                     obs2=self.obs2_buf[idxs],
+                     act=self.act_buf[idxs],
+                     rew=self.rew_buf[idxs],
+                     done=self.done_buf[idxs])
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
+
 
 def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
          steps_per_epoch=2000, epochs=10000, replay_size=int(1e5), gamma=0.99,
-         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=256, start_steps=2000,
+         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=64, start_steps=2000,
          update_after=1000, update_every=1000, act_noise=0.05, num_test_episodes=1,
          max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     """
@@ -309,7 +322,10 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
                 ac.cuda()
                 ac_targ.cuda()
             for _ in range(update_every-500):
-                batch = replay_buffer.sample_batch(batch_size)
+                if use_lstm:
+                    batch = replay_buffer.sample_seq_batch(batch_size)
+                else:
+                    batch = replay_buffer.sample_batch(batch_size)
                 if torch.cuda.is_available():
                     for key, value in batch.items():
                         batch[key] = value.cuda()
