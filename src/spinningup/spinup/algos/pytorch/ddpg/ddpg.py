@@ -46,7 +46,7 @@ class ReplayBuffer:
 
     def sample_seq_batch(self, batch_size=32):
         first_idx = np.random.randint(0, self.size - batch_size, size=1)
-        idxs = np.array(first_idx, first_idx+batch_size)
+        idxs = np.arange(first_idx, first_idx+batch_size)
         batch = dict(obs=self.obs_buf[idxs],
                      obs2=self.obs2_buf[idxs],
                      act=self.act_buf[idxs],
