@@ -6,8 +6,12 @@ import gym
 import time
 import datetime
 import rospy
-import spinup.algos.pytorch.ddpg.core_fcOnly as core
+import spinup.algos.pytorch.ddpg.core_fc_lstm_v1 as core
 from spinup.utils.logx import EpochLogger
+
+
+use_lstm = True
+seq_len = 10
 
 
 class ReplayBuffer:
@@ -16,21 +20,59 @@ class ReplayBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size):
-        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.obs2_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros(size, dtype=np.float32)
-        self.done_buf = np.zeros(size, dtype=np.float32)
-        self.ptr, self.size, self.max_size = 0, 0, size
+        self.ptr = 0
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+        self.episodes_list = [None for _ in range(100)]
+        self.episodes_list_max_size = 100
+        self.epi_ptr = -1
+        self.max_ep_len = 1000
+        self.episode_buffer_dict = {
+            'obs': np.zeros(core.combined_shape(self.max_ep_len, obs_dim), dtype=np.float32),
+            'obs2': np.zeros(core.combined_shape(self.max_ep_len, obs_dim), dtype=np.float32),
+            'act': np.zeros(core.combined_shape(self.max_ep_len, act_dim), dtype=np.float32),
+            'rew': np.zeros(self.max_ep_len, dtype=np.float32),
+            'done': np.zeros(self.max_ep_len, dtype=np.float32),
+        }
+
+    def count_epi_ptr(self):
+        # import ipdb
+        # ipdb.set_trace()
+
+        if self.epi_ptr != -1:
+            if self.ptr > seq_len:
+                self.episodes_list[self.epi_ptr] = {}
+                for key in self.episode_buffer_dict.keys():
+                    self.episodes_list[self.epi_ptr][key] = self.episode_buffer_dict[key][:self.ptr]
+            else:
+                self.epi_ptr -= 1
+
+        self.epi_ptr += 1
+        self.ptr = 0
+        if self.epi_ptr == self.episodes_list_max_size:
+            self.epi_ptr = 0
 
     def store(self, obs, act, rew, next_obs, done):
-        self.obs_buf[self.ptr] = obs
-        self.obs2_buf[self.ptr] = next_obs
-        self.act_buf[self.ptr] = act
-        self.rew_buf[self.ptr] = rew
-        self.done_buf[self.ptr] = done
-        self.ptr = (self.ptr+1) % self.max_size
-        self.size = min(self.size+1, self.max_size)
+        self.episode_buffer_dict['obs'][self.ptr] = obs
+        self.episode_buffer_dict['obs2'][self.ptr] = next_obs
+        self.episode_buffer_dict['act'][self.ptr] = act
+        self.episode_buffer_dict['rew'][self.ptr] = rew
+        self.episode_buffer_dict['done'][self.ptr] = done
+        self.ptr += 1
+
+    def __repr__(self):
+        string1 = f'epi_ptr : {self.epi_ptr}\n'
+        string2 = ''
+        # import ipdb
+        # ipdb.set_trace()
+
+        try:
+            for key in self.episode_buffer_dict.keys():
+                string2 += f'episodes[{key}] : {self.episodes_list[self.epi_ptr][key].shape}\n'
+        except:
+            pass
+
+        return string1 + string2
 
     def sample_batch(self, batch_size=32):
         idxs = np.random.randint(0, self.size, size=batch_size)
@@ -39,19 +81,68 @@ class ReplayBuffer:
                      act=self.act_buf[idxs],
                      rew=self.rew_buf[idxs],
                      done=self.done_buf[idxs])
-        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
 
-# import torch.nn as nn
-# def init_weights(m):
-#     if type(m) == nn.Linear:
-#         torch.nn.init.xavier_uniform(m.weight)
-#         m.bias.data.fill_(0.01)
+    def sample_seq_batch(self, batch_size=32):
+        # import ipdb
+        # ipdb.set_trace()
+
+        out_dict = {
+            'obs': np.zeros((batch_size, seq_len, self.obs_dim[0])),
+            'obs2': np.zeros((batch_size, seq_len, self.obs_dim[0])),
+            'act': np.zeros((batch_size, seq_len, self.act_dim)),
+            'rew': np.zeros((batch_size, seq_len)),
+            'done': np.zeros((batch_size, seq_len))
+        }
+
+        # sample_idx = np.random.randint(0,len(self.episodes_list),batch_size)
+        # sampled_episodes = np.array(self.episodes_list)[sample_idx]
+
+        sample_count = 0
+        # sampled_episodes = np.random.choice(np.array(self.episodes_list), batch_size, replace=False)
+        candidate = []
+        for i in range(self.episodes_list_max_size):
+            if isinstance(self.episodes_list[i], dict):
+                candidate.append(i)
+
+        while sample_count < batch_size:
+            sampled_episode_idx = int(np.random.choice(candidate, 1))
+            sampled_episode = self.episodes_list[sampled_episode_idx]
+            # import ipdb
+            # ipdb.set_trace()
+            # print("======================")
+            # print(type(sampled_episode))
+            # print(sampled_episode)
+            # print("======================")
+            if not isinstance(sampled_episode, dict):
+                continue
+
+            max_len = sampled_episode['rew'].shape[0]
+            first_idx = np.random.randint(0, max_len - seq_len, size=1)[0]
+            last_idx = first_idx + seq_len
+            for k in sampled_episode.keys():
+                out_dict[k][sample_count] = sampled_episode[k][first_idx:last_idx]
+            sample_count += 1
+
+        result = []
+        for seq_idx in range(seq_len):
+            batch_dict = {
+                'obs': torch.Tensor(out_dict['obs'][:, seq_idx]),
+                'obs2': torch.Tensor(out_dict['obs2'][:, seq_idx]),
+                'act': torch.Tensor(out_dict['act'][:, seq_idx]),
+                'rew': torch.Tensor(out_dict['rew'][:, seq_idx]),
+                'done': torch.Tensor(out_dict['done'][:, seq_idx]),
+            }
+            result.append(batch_dict)
+
+        return result
+
 
 def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
          steps_per_epoch=2000, epochs=10000, replay_size=int(1e5), gamma=0.99,
-         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=2000,
-         update_after=1000, update_every=1000, act_noise=0.05, num_test_episodes=1,
-         max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
+         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=1000,
+         update_after=1000, update_every=500, act_noise=0.05, num_test_episodes=1,
+         max_ep_len=500, logger_kwargs=dict(), save_freq=1):
     """
     Deep Deterministic Policy Gradient (DDPG)
 
@@ -163,9 +254,10 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
     # Experience buffer
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
 
+
     # Count variables (protip: try to get a feel for how different size networks behave!)
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.q])
-    logger.log('\nNumber of parameters: \t pi: %d, \t q: %d\n'%var_counts)
+    logger.log('\nNumber of parameters: \t pi: %d, \t q: %d\n' % var_counts)
 
     # Set up function for computing DDPG Q-loss
     def compute_loss_q(data):
@@ -181,7 +273,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             backup = r + gamma * (1 - d) * q_pi_targ
 
         # MSE loss against Bellman backup
-        loss_q = ((q - backup)**2).mean()
+        loss_q = ((q - backup) ** 2).mean()
 
         # Useful info for logging
         loss_info = dict(QVals=q.cpu().detach().numpy())
@@ -204,8 +296,14 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
     def update(data):
         # First run one gradient descent step for Q.
         q_optimizer.zero_grad()
-        loss_q, loss_info = compute_loss_q(data)
-        loss_q.backward()
+        total_loss_q = 0.
+        ac.reset_lstm()
+        for i in range(seq_len):
+            # loss_q, loss_info = compute_loss_q(data[i])
+            loss_q, loss_info = compute_loss_q(data[i])
+            total_loss_q += loss_q
+        total_loss_q /= seq_len
+        total_loss_q.backward()
         q_optimizer.step()
 
         # Freeze Q-network so you don't waste computational effort
@@ -215,8 +313,14 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
         # Next run one gradient descent step for pi.
         pi_optimizer.zero_grad()
-        loss_pi = compute_loss_pi(data)
-        loss_pi.backward()
+        total_loss_pi = 0.
+        ac.reset_lstm()
+        for i in range(seq_len):
+            loss_pi = compute_loss_pi(data[i])
+            total_loss_pi += loss_pi
+
+        total_loss_pi /= seq_len
+        total_loss_pi.backward()
         pi_optimizer.step()
 
         # Unfreeze Q-network so you can optimize it at next DDPG step.
@@ -247,8 +351,11 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
         print("[DDPG] eval......")
         for j in range(num_test_episodes):
             o, d, ep_ret, ep_len = env.reset(), False, 0, 0
+            if use_lstm:
+                ac.reset_lstm()
+
             # while not(d or (ep_len == max_ep_len)):
-            while not(d or (ep_len == 100)):
+            while not (d or (ep_len == 10)):
                 # Take deterministic actions at test time (noise_scale=0)
                 a = get_action(o, 0)
                 print(f"[Eval] a: {a}")
@@ -261,6 +368,9 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
+    if use_lstm:
+        ac.reset_lstm()
+        replay_buffer.count_epi_ptr()
 
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
@@ -300,21 +410,31 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
         # End of trajectory handling
         if d or (ep_len == max_ep_len):
+            env.pause_pedsim()
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             o, ep_ret, ep_len = env.reset(), 0, 0
+            if use_lstm:
+                ac.reset_lstm()
+                replay_buffer.count_epi_ptr()
+            env.unpause_pedsim()
 
         # Update handling
         if t >= update_after and t % update_every == 0:
+            env.pause_pedsim()
             ac.train()  # active training BN
             ac_targ.train()
             if torch.cuda.is_available():
                 ac.cuda()
                 ac_targ.cuda()
-            for _ in range(update_every):
-                batch = replay_buffer.sample_batch(batch_size)
+            for k in range(update_every-300):
+                if use_lstm:
+                    batch = replay_buffer.sample_seq_batch(batch_size)
+                else:
+                    batch = replay_buffer.sample_batch(batch_size)
                 if torch.cuda.is_available():
-                    for key, value in batch.items():
-                        batch[key] = value.cuda()
+                    for i in range(seq_len):
+                        for key, value in batch[i].items():
+                            batch[i][key] = value.cuda()
                 update(data=batch)
                 soft_target_update()
             ac.eval()
@@ -322,10 +442,11 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             if torch.cuda.is_available():
                 ac.cpu()
                 ac_targ.cpu()
+            env.unpause_pedsim()
 
         # End of epoch handling
-        if (t+1) % steps_per_epoch == 0:
-            epoch = (t+1) // steps_per_epoch
+        if (t + 1) % steps_per_epoch == 0:
+            epoch = (t + 1) // steps_per_epoch
 
             # Save model
             if (epoch % save_freq == 0) or (epoch == epochs):
@@ -334,10 +455,13 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             # Test the performance of the deterministic version of the agent.
             test_agent()
             o, d, ep_ret, ep_len = env.reset(), False, 0, 0
+            if use_lstm:
+                ac.reset_lstm()
+                replay_buffer.count_epi_ptr()
 
+            # Transform human-readable time
             sec = time.time() - start_time
             elapsed_time = str(datetime.timedelta(seconds=sec)).split('.')[0]
-
 
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)
@@ -356,6 +480,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
 if __name__ == '__main__':
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
     parser.add_argument('--hid', type=int, default=256)
@@ -367,9 +492,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
+
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
 
-    ddpg(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
-         ac_kwargs=dict(hidden_sizes=[args.hid]*args.l),
+    ddpg(lambda: gym.make(args.env), actor_critic=core.MLPActorCritic,
+         ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
          gamma=args.gamma, seed=args.seed, epochs=args.epochs,
          logger_kwargs=logger_kwargs)

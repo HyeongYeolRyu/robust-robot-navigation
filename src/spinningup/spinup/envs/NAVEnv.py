@@ -31,13 +31,13 @@ class env(core.Env):
         self.sensor_range = 4
         self.sensor_timeout = 0.5
         self.sensor_dim = 480
-        self.stack_size = 30
+        self.stack_size = 1
         self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
         self.use_stacked_scan_obs = False
-        self.damage_sensor = True
+        self.damage_sensor = False
 
         # Sensor visualization
-        self.visualize_scan_obs = True
+        self.visualize_scan_obs = False
         self.visualize_stacked_scan_obs = False
         self.vis_window = None
         self.visualize_y_axis_size = 100
@@ -53,11 +53,9 @@ class env(core.Env):
         self.robot_position = PoseStamped()
         self.past_action = np.array([0., 0.])
         self.pitch = 0.
-        self.simulation_speed = 1  # normal_speed
-        self.sleep_time = 0.01 * self.simulation_speed
         self.past_reward = 0
         self.past_info = {'is_arrive': False}
-        self.init_position = [21, 7]
+        self.init_position = [17, 11]
         self.state_dim = 6
 
         # Input state
@@ -115,13 +113,11 @@ class env(core.Env):
                                         )
             self.observation_space = spaces.Box(-np.inf, np.inf, shape=(self.sensor_dim + self.state_dim, ), dtype='float32')
 
-        # initialize damage sensor
+        # Initialize damage sensor
         if self.damage_sensor:
-            # self.damage_module = ConstDamageModule(p=0.5, occ_range=(0,240))
-
-            self.damage_module = SplitDamageModule(p=0.9, splits_num=12, occ_num=6)
+            self.damage_module = ConstDamageModule(p=0.5, occ_range=(0,240))
+            # self.damage_module = SplitDamageModule(p=0.9, splits_num=12, occ_num=6)
             self.damage_module.reset()
-
 
     def _get_goal_distance(self):
         goal_distance = 0.
@@ -214,11 +210,7 @@ class env(core.Env):
 
         # damage
         if self.damage_sensor:
-
             scan_range = self.damage_module(np.array(scan_range))
-            import pprint
-            pprint.pprint(scan_range)
-
 
 
         rel_dist = math.sqrt((self.goal_position.position.x - self.position.x)**2 +
@@ -427,9 +419,9 @@ class env(core.Env):
         self._pause_gazebo()
         # self.pause_pedsim()
 
-
-        self.damage_module.reset()
-
+        # Initialize damage sensor
+        if self.damage_sensor:
+            self.damage_module.reset()
 
         # 6. Return state
         return np.asarray(state)
@@ -456,8 +448,8 @@ class env(core.Env):
             # target.model_name = 'target'  # the same with sdf name
             # target.model_xml = goal_urdf
             # offset_from_wall = 5
-            self.goal_position.position.x = random.uniform(15, 20)
-            self.goal_position.position.y = random.uniform(10, 12)
+            self.goal_position.position.x = random.uniform(12, 13)
+            self.goal_position.position.y = random.uniform(15, 16)
             # self.goal_position.position.x = 20 - 2.5
             # self.goal_position.position.y = 15 - 2.5
 

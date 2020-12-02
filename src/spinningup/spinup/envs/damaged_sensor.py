@@ -41,10 +41,10 @@ class ConstDamageModule(DamageModule):
     def __init__(self,
                  p=0.2,
                  damage_mode='off',
-                 occ_range=(0, 80), # end to start
+                 occ_range=(0, 80),  # end to start
                  sensor_dim=480,
                  sensor_range=4.):
-        
+
         super(ConstDamageModule, self).__init__(damage_mode, sensor_dim, sensor_range)
 
         if occ_range[0] < 0 or occ_range[1] >= sensor_dim:
@@ -54,11 +54,11 @@ class ConstDamageModule(DamageModule):
         self.occ['p'] = p
 
     def reset(self):
-        if np.random.uniform(0, 1) > self.occ['p']:        # Not damaged
-            self.occ['mask'][:] = False
+        self.occ['mask'][:] = False
+        if np.random.uniform(0, 1) > self.occ['p']:  # Not damaged
             return
 
-        self.occ['mask'][self.occ_range[0] : self.occ_range[1]] = True
+        self.occ['mask'][self.occ_range[0]: self.occ_range[1]] = True
 
 
 class SplitDamageModule(DamageModule):
@@ -71,7 +71,7 @@ class SplitDamageModule(DamageModule):
                  fix_occ_num=False,
                  sensor_dim=480,
                  sensor_range=4.):
-        
+
         super(SplitDamageModule, self).__init__(damage_mode, sensor_dim, sensor_range)
 
         if sensor_dim % splits_num != 0:
@@ -84,8 +84,8 @@ class SplitDamageModule(DamageModule):
         self.occ['fix_num'] = fix_occ_num
 
     def reset(self):
-        if np.random.uniform(0, 1) > self.occ['p']:        # Not damaged
-            self.occ['mask'][:] = False
+        self.occ['mask'][:] = False
+        if np.random.uniform(0, 1) > self.occ['p']:  # Not damaged
             return
 
         # randomly select the number of occlusion(1 ~ self.occ['num'])
@@ -119,13 +119,13 @@ class RandomDamageModule(DamageModule):
         self.occ['fix_num'] = fix_occ_num
 
     def reset(self):
-        if np.random.uniform(0, 1) > self.occ['p']:        # Not damaged
-            self.occ['mask'][:] = False
+        self.occ['mask'][:] = False
+        if np.random.uniform(0, 1) > self.occ['p']:  # Not damaged
             return
 
         if self.occ['fix_num'] is False:
             occ_num = np.random.randint(1, self.occ['num'] + 1)
-        else :
+        else:
             occ_num = self.occ['num']
 
         total_occ_length = self.occ['length']
@@ -135,7 +135,7 @@ class RandomDamageModule(DamageModule):
         for i in range(self.trial):
             if occ_num != 1:
                 occ_length = np.random.randint(1, total_occ_length)
-                if total_occ_length-occ_length <= occ_num:
+                if total_occ_length - occ_length <= occ_num:
                     continue
             else:
                 occ_length = total_occ_length
@@ -156,7 +156,7 @@ class RandomDamageModule(DamageModule):
                 break
 
         for begin, end in mask_index:
-            self.occ['mask'][begin : end] = True
+            self.occ['mask'][begin: end] = True
 
     def _is_index_overlapped(self, mask_index, begin, end):
         for a, b in mask_index:
@@ -168,24 +168,24 @@ class RandomDamageModule(DamageModule):
 
         return False
 
+if __name__ == '__main__':
 
-# if __name__ == '__main__':
-#
-#     sensor_data = np.ones(480, dtype=np.float)
-#
-#     print('ConstDamageModule ====')
-#     damage_module = ConstDamageModule(occ_range=[120, 240])
-#     damage_module.reset()
-#     print(damage_module(sensor_data))
-#
-#     print('SplitDamageModule ====')
-#     damage_module = SplitDamageModule(p=1.0, occ_num=2, fix_occ_num=True)
-#     damage_module.reset()
-#     print(damage_module(sensor_data))
-#
-#     print('RandomDamageModule ====')
-#     damage_module = RandomDamageModule(p=1.0, occ_num=4, fix_occ_num=True)
-#     damage_module.reset()
-#     print(damage_module(sensor_data))
-#     print(sum(damage_module(sensor_data)))
+    sensor_data = np.ones(480, dtype=np.float)
 
+    # print('ConstDamageModule ====')
+    # damage_module = ConstDamageModule(occ_range=[120, 240])
+    # damage_module.reset()
+    # print(damage_module(sensor_data))
+
+    print('SplitDamageModule ====')
+    damage_module = SplitDamageModule(p=1.0, occ_num=2, fix_occ_num=False)
+    for i in range(10):
+        print(';;;;;;;')
+        damage_module.reset()
+        print(damage_module(sensor_data))
+
+    # print('RandomDamageModule ====')
+    # damage_module = RandomDamageModule(p=1.0, occ_num=4, fix_occ_num=True)
+    # damage_module.reset()
+    # print(damage_module(sensor_data))
+    # print(sum(damage_module(sensor_data)))
