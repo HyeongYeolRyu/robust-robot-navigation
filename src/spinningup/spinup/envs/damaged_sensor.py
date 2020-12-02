@@ -39,8 +39,9 @@ class DamageModule:
 class ConstDamageModule(DamageModule):
 
     def __init__(self,
+                 p=0.2,
                  damage_mode='off',
-                 occ_range=(0, 80),
+                 occ_range=(0, 80), # end to start
                  sensor_dim=480,
                  sensor_range=4.):
         
@@ -48,8 +49,16 @@ class ConstDamageModule(DamageModule):
 
         if occ_range[0] < 0 or occ_range[1] >= sensor_dim:
             raise ValueError()
+        self.occ_range = occ_range
 
-        self.occ['mask'][occ_range[0] : occ_range[1]] = True
+        self.occ['p'] = p
+
+    def reset(self):
+        if np.random.uniform(0, 1) > self.occ['p']:        # Not damaged
+            self.occ['mask'][:] = False
+            return
+
+        self.occ['mask'][self.occ_range[0] : self.occ_range[1]] = True
 
 
 class SplitDamageModule(DamageModule):
@@ -160,23 +169,23 @@ class RandomDamageModule(DamageModule):
         return False
 
 
-if __name__ == '__main__':
-
-    sensor_data = np.ones(480, dtype=np.float)
-
-    print('ConstDamageModule ====')
-    damage_module = ConstDamageModule(occ_range=[120, 240])
-    damage_module.reset()
-    print(damage_module(sensor_data))
-
-    print('SplitDamageModule ====')
-    damage_module = SplitDamageModule(p=1.0, occ_num=2, fix_occ_num=True)
-    damage_module.reset()
-    print(damage_module(sensor_data))
-
-    print('RandomDamageModule ====')
-    damage_module = RandomDamageModule(p=1.0, occ_num=4, fix_occ_num=True)
-    damage_module.reset()
-    print(damage_module(sensor_data))
-    print(sum(damage_module(sensor_data)))
+# if __name__ == '__main__':
+#
+#     sensor_data = np.ones(480, dtype=np.float)
+#
+#     print('ConstDamageModule ====')
+#     damage_module = ConstDamageModule(occ_range=[120, 240])
+#     damage_module.reset()
+#     print(damage_module(sensor_data))
+#
+#     print('SplitDamageModule ====')
+#     damage_module = SplitDamageModule(p=1.0, occ_num=2, fix_occ_num=True)
+#     damage_module.reset()
+#     print(damage_module(sensor_data))
+#
+#     print('RandomDamageModule ====')
+#     damage_module = RandomDamageModule(p=1.0, occ_num=4, fix_occ_num=True)
+#     damage_module.reset()
+#     print(damage_module(sensor_data))
+#     print(sum(damage_module(sensor_data)))
 

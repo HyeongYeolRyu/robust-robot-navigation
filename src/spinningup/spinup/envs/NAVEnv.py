@@ -10,6 +10,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from std_srvs.srv import Empty
 from gazebo_msgs.srv import SpawnModel, DeleteModel
+from spinup.envs.damaged_sensor import *
 
 
 class env(core.Env):
@@ -32,13 +33,14 @@ class env(core.Env):
         self.sensor_dim = 480
         self.stack_size = 30
         self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
-        self.use_stacked_scan_obs = True
+        self.use_stacked_scan_obs = False
+        self.damage_sensor = True
 
         # Sensor visualization
-        self.visualize_scan_obs = False
+        self.visualize_scan_obs = True
         self.visualize_stacked_scan_obs = False
         self.vis_window = None
-        self.visualize_y_axis_size = 1
+        self.visualize_y_axis_size = 100
         self.plt_pause_time = 0.0000000001
 
         # Robot state
@@ -112,6 +114,14 @@ class env(core.Env):
                                           np.array([0, 0, 0, 0]))
                                         )
             self.observation_space = spaces.Box(-np.inf, np.inf, shape=(self.sensor_dim + self.state_dim, ), dtype='float32')
+
+        # initialize damage sensor
+        if self.damage_sensor:
+            # self.damage_module = ConstDamageModule(p=0.5, occ_range=(0,240))
+
+            self.damage_module = SplitDamageModule(p=0.9, splits_num=12, occ_num=6)
+            self.damage_module.reset()
+
 
     def _get_goal_distance(self):
         goal_distance = 0.
@@ -201,6 +211,15 @@ class env(core.Env):
             print("                                                                                  Collision!!!")
             print("==============================================================================================")
             done = True
+
+        # damage
+        if self.damage_sensor:
+
+            scan_range = self.damage_module(np.array(scan_range))
+            import pprint
+            pprint.pprint(scan_range)
+
+
 
         rel_dist = math.sqrt((self.goal_position.position.x - self.position.x)**2 +
                               (self.goal_position.position.y - self.position.y)**2)
@@ -407,6 +426,10 @@ class env(core.Env):
         # 5. Pause gazebo
         self._pause_gazebo()
         # self.pause_pedsim()
+
+
+        self.damage_module.reset()
+
 
         # 6. Return state
         return np.asarray(state)

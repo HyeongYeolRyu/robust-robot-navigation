@@ -8,6 +8,7 @@ Panels:
         - /Tracking-Visuals1
         - /Tracking-Visuals1/TrackedPersons1/History as line1
         - /Tracking-Visuals1/TrackedGroups1/Render group IDs1
+        - /Pose1/Status1
         - /PointStamped1
         - /Odometry1
         - /Odometry1/Shape1
@@ -134,7 +135,7 @@ Visualization Manager:
           Occlusion alpha: 1
           Render group IDs:
             Hide IDs of single-person groups: false
-            Value: true
+            Value: false
           Render history: false
           Single-person groups in constant color: false
           Style:
@@ -148,7 +149,7 @@ Visualization Manager:
           Z offset:
             Use Z position from message: false
             Value: 0
-      Enabled: false
+      Enabled: true
       Name: Tracking-Visuals
     - Alpha: 1
       Axes Length: 1
