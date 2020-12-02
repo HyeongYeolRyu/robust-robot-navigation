@@ -11,7 +11,7 @@ from spinup.utils.logx import EpochLogger
 
 
 use_lstm = True
-seq_len = 10
+seq_len = 50
 
 
 class ReplayBuffer:
@@ -140,9 +140,9 @@ class ReplayBuffer:
 
 def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
          steps_per_epoch=2000, epochs=10000, replay_size=int(1e5), gamma=0.99,
-         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=128, start_steps=1000,
+         polyak=0.995, pi_lr=1e-4, q_lr=1e-4, batch_size=64, start_steps=1000,
          update_after=1000, update_every=500, act_noise=0.05, num_test_episodes=1,
-         max_ep_len=500, logger_kwargs=dict(), save_freq=1):
+         max_ep_len=1000, logger_kwargs=dict(), save_freq=1):
     """
     Deep Deterministic Policy Gradient (DDPG)
 
@@ -244,7 +244,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
     # ac.apply(init_weights)
     ac_targ = deepcopy(ac)
-    ac.eval()  # in-active training BN
+    # ac.eval()  # in-active training BN
     print(f"[MODEL] Actor_Critic: {ac}")
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -253,7 +253,6 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
 
     # Experience buffer
     replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
-
 
     # Count variables (protip: try to get a feel for how different size networks behave!)
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.q])
@@ -426,7 +425,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
             if torch.cuda.is_available():
                 ac.cuda()
                 ac_targ.cuda()
-            for k in range(update_every-300):
+            for k in range(update_every-400):
                 if use_lstm:
                     batch = replay_buffer.sample_seq_batch(batch_size)
                 else:
@@ -437,8 +436,8 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
                             batch[i][key] = value.cuda()
                 update(data=batch)
                 soft_target_update()
-            ac.eval()
-            ac_targ.eval()
+            # ac.eval()
+            # ac_targ.eval()
             if torch.cuda.is_available():
                 ac.cpu()
                 ac_targ.cpu()

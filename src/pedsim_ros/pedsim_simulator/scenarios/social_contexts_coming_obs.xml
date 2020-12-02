@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--This scenario file was created by SGDiCoP on 2014-04-16T15:14:48-->
+<scenario>
+
+  <obstacle x1="9.5" y1="9.5" x2="19.5" y2="9.5"/> <!-- bottom block -->
+  <obstacle x1="9.5" y1="9.5" x2="9.5" y2="19.5"/> <!-- left block -->
+  <obstacle x1="9.5" y1="19.5" x2="19.5" y2="19.5"/> <!-- right block -->
+  <obstacle x1="19.5" y1="19.5" x2="19.5" y2="9.5"/> <!-- top block -->
+
+
+  <waypoint id="bookshop_entry" x="17" y="16" r="4"/>
+  <waypoint id="bookshop_exit" x="10" y="10" r="4"/>
+
+  <waypoint id="coffee_entry" x="10" y="11" r="4"/>
+  <waypoint id="coffee_exit" x="18" y="16" r="4"/>
+
+  <waypoint id="robot_goal" x="18" y="18" r="3"/>
+  <waypoint id="robot_start" x="10" y="10" r="3"/>
+
+  <queue id="info_desk" x="20" y="15" direction="0"/>
+
+    <!--Agents-->
+    <agent x="12" y="11" n="1" dx="2" dy="2" type="1">
+        <addwaypoint id="robot_start"/>
+        <addwaypoint id="robot_goal"/>
+    </agent>
+    <!--AgentClusters-->
+    <agent x="17" y="15" n="1" dx="3" dy="3" type="1">
+        <addwaypoint id="bookshop_entry"/>
+        <addwaypoint id="bookshop_exit"/>
+    </agent>
+    <agent x="11" y="11" n="1" dx="3" dy="3" type="1">
+        <addwaypoint id="coffee_entry"/>
+        <addwaypoint id="coffee_exit"/>
+    </agent>
+
+</scenario>

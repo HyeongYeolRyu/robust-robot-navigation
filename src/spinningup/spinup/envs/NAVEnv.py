@@ -28,10 +28,10 @@ class env(core.Env):
     def __init__(self, is_training):
         print("[ENV] NAVEnv has been being loaded!")
         # Sensor specification
-        self.sensor_range = 4
+        self.sensor_range = 8
         self.sensor_timeout = 0.5
         self.sensor_dim = 480
-        self.stack_size = 1
+        self.stack_size = 30
         self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
         self.use_stacked_scan_obs = False
         self.damage_sensor = False
@@ -53,6 +53,8 @@ class env(core.Env):
         self.robot_position = PoseStamped()
         self.past_action = np.array([0., 0.])
         self.pitch = 0.
+        self.past_yaw_list = [0 for _ in range(self.stack_size)]
+        self.yaw_ptr = 0.
         self.past_reward = 0
         self.past_info = {'is_arrive': False}
         self.init_position = [17, 11]
@@ -212,7 +214,6 @@ class env(core.Env):
         if self.damage_sensor:
             scan_range = self.damage_module(np.array(scan_range))
 
-
         rel_dist = math.sqrt((self.goal_position.position.x - self.position.x)**2 +
                               (self.goal_position.position.y - self.position.y)**2)
 
@@ -257,7 +258,7 @@ class env(core.Env):
             self.pub_cmd_vel.publish(Twist())
             # return reward
         elif done:
-            r_done = -100.
+            r_done = -350.
             self.pub_cmd_vel.publish(Twist())
             # return r_done
 
@@ -271,7 +272,6 @@ class env(core.Env):
 
     def step(self, action):
         self._unpause_gazebo()
-        # self.unpause_pedsim()
 
         linear_vel = action[0]
         ang_vel = action[1]
@@ -284,21 +284,19 @@ class env(core.Env):
         self.pub_goal.publish(self.goal_point_stamped)  # Publish Goal position.
 
         # This should be included for processing the delay
-        # rospy.sleep(0.001)
+        rospy.sleep(0.001)
 
         try:
             data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
             scan, rel_dist, yaw, rel_angle, diff_angle, done, arrive = self._process_scan_obs(data)
-            state = [i / self.sensor_range for i in scan]
+            state = [i for i in scan]
 
             if self.use_stacked_scan_obs:
                 state = self._stack_scan_obs(state)
+                # self._calibrate_sensor()
 
             if self.visualize_scan_obs or self.visualize_stacked_scan_obs:
                 self._visualize_sensor(scan)
-
-            # for pa in self.past_action:
-            #     state.append(pa)
 
             state = state + [self.past_action[0], self.past_action[1],
                              rel_dist / self.diagonal_dis,
@@ -314,6 +312,7 @@ class env(core.Env):
             self.past_state = state
             self.past_reward = reward
             self.past_info = info
+            self.past_yaw = yaw
         except Exception as e:
             print(f"[Env] Error in step function: {e} --> use stored past value instead.")
             state = self.past_state
@@ -322,7 +321,6 @@ class env(core.Env):
             done = True
 
         self._pause_gazebo()
-        # self.pause_pedsim()
 
         return np.asarray(state), reward, done, info
 
@@ -386,10 +384,11 @@ class env(core.Env):
             self.goal_distance = self._get_goal_distance()
 
             scan, rel_dist, yaw, rel_angle, diff_angle, done, arrive = self._process_scan_obs(data)
-            state = [i / self.sensor_range for i in scan]  # Normalize scan data
+            state = [i for i in scan]  # Normalize scan data
 
             if self.use_stacked_scan_obs:
                 state = self._stack_scan_obs(state)
+                # self._calibrate_sensor()
 
             if self.visualize_scan_obs or self.visualize_stacked_scan_obs:
                 self._visualize_sensor(scan)
@@ -408,6 +407,7 @@ class env(core.Env):
             self.past_state = state
             self.past_reward = reward
             self.past_info = info
+            self.past_yaw = yaw
         except Exception as e:
             print(f"[Env] Error in step function: {e} --> use stored past value instead.")
             state = self.past_state
@@ -478,11 +478,32 @@ class env(core.Env):
 
         if self.visualize_stacked_scan_obs:
             stacked_scan_obs_2d = np.array(self.stacked_scan_obs[::-1]).reshape(self.stack_size, self.sensor_dim)
-            # Multiplying 4 makes back to the original sensor data (before it, we normalized)
-            stacked_scan_obs_2d = stacked_scan_obs_2d * self.sensor_range
+            # Multiplying 'self.sensor_range' makes back to the original sensor data (before it, we normalized)
+            stacked_scan_obs_2d = stacked_scan_obs_2d  # * self.sensor_range
             self.vis_window.set_data(stacked_scan_obs_2d)
             plt.pause(self.plt_pause_time)
             plt.draw()
+
+    def _calibrate_sensor(self):
+        shift_weight = (self.yaw - self.past_yaw) / 60
+        shift_cnt = int(self.sensor_dim * shift_weight)
+        for i in range(self.stack_size):
+            if shift_cnt < 0:
+                for _ in range(shift_cnt):
+                    self.stacked_scan_obs[i*self.sensor_dim: (i+1)*self.sensor_dim].pop(-1)
+                    self.stacked_scan_obs[i*self.sensor_dim: (i+1)*self.sensor_dim].insert(0, 0)
+            elif shift_cnt > 0:
+                for _ in range(shift_cnt):
+                    self.stacked_scan_obs[i*self.sensor_dim: (i+1)*self.sensor_dim].pop(0)
+                    self.stacked_scan_obs[i*self.sensor_dim: (i+1)*self.sensor_dim].insert(-1, 0)
+            else:
+                return
+
+    def _store_yaw(self, current_yaw):
+        self.past_yaw_list[self.yaw_ptr] = current_yaw
+        self.yaw_ptr += 1
+        if self.yaw_ptr == self.stack_size:
+            self.yaw_ptr = 0
 
     ##########################################################################################################
     #                                           UNUSED
