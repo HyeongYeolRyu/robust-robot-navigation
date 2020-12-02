@@ -30,7 +30,7 @@ class env(core.Env):
         self.sensor_range = 4
         self.sensor_timeout = 0.5
         self.sensor_dim = 480
-        self.stack_size = 1
+        self.stack_size = 30
         self.stacked_scan_obs = [self.sensor_range for _ in range(self.stack_size * self.sensor_dim)]
         self.use_stacked_scan_obs = True
 
@@ -273,7 +273,7 @@ class env(core.Env):
         self.pub_goal.publish(self.goal_point_stamped)  # Publish Goal position.
 
         # This should be included for processing the delay
-        rospy.sleep(0.001)
+        # rospy.sleep(0.001)
 
         try:
             data = rospy.wait_for_message('scan', LaserScan, timeout=self.sensor_timeout)
@@ -432,9 +432,9 @@ class env(core.Env):
             # target = SpawnModel
             # target.model_name = 'target'  # the same with sdf name
             # target.model_xml = goal_urdf
-            offset_from_wall = 5
-            self.goal_position.position.x = random.uniform(5 + offset_from_wall, 22 - offset_from_wall)
-            self.goal_position.position.y = random.uniform(5 + offset_from_wall, 22 - offset_from_wall)
+            # offset_from_wall = 5
+            self.goal_position.position.x = random.uniform(15, 20)
+            self.goal_position.position.y = random.uniform(10, 12)
             # self.goal_position.position.x = 20 - 2.5
             # self.goal_position.position.y = 15 - 2.5
 

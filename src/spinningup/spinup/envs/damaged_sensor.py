@@ -1,24 +1,23 @@
 import numpy as np
 
+
 class DamageModule:
 
     def __init__(self,
-                 damage_mode='off',
+                 damage_mode='off',  # 'off' or 'gaussian'
                  sensor_dim=480,
                  sensor_range=4.):
 
         self.occ = dict()
         self.sensor = dict()
 
-        self.occ['damage_mode'] = damage_mode     # off, gaussian
-        self.occ['mask']        = np.zeros(sensor_dim, np.bool)
+        self.occ['damage_mode'] = damage_mode
+        self.occ['mask'] = np.zeros(sensor_dim, np.bool)
 
-        self.sensor['dim']   = sensor_dim
+        self.sensor['dim'] = sensor_dim
         self.sensor['range'] = sensor_range
 
-
     def damage_sensor_data(self, sensor_data):
-
         sensor_data = sensor_data.copy()
 
         if self.occ['damage_mode'] == 'off':
@@ -29,11 +28,9 @@ class DamageModule:
 
         return sensor_data
 
-
     def __call__(self, sensor_data):
         sensor_data = self.damage_sensor_data(sensor_data)
         return sensor_data
-
 
     def reset(self):
         pass
@@ -76,7 +73,6 @@ class SplitDamageModule(DamageModule):
         self.occ['num_splits'] = splits_num
         self.occ['p'] = p
         self.occ['fix_num'] = fix_occ_num
-
 
     def reset(self):
         if np.random.uniform(0, 1) > self.occ['p']:        # Not damaged
@@ -138,7 +134,7 @@ class RandomDamageModule(DamageModule):
             begin = np.random.randint(0, self.sensor['dim'] - occ_length)
             end = begin + occ_length
 
-            if self.__is_index_overlapped(mask_index, begin, end):
+            if self._is_index_overlapped(mask_index, begin, end):
                 continue
 
             mask_index.append((begin, end))
@@ -153,8 +149,7 @@ class RandomDamageModule(DamageModule):
         for begin, end in mask_index:
             self.occ['mask'][begin : end] = True
 
-
-    def __is_index_overlapped(self, mask_index, begin, end):
+    def _is_index_overlapped(self, mask_index, begin, end):
         for a, b in mask_index:
             if a <= begin < b:
                 return True
