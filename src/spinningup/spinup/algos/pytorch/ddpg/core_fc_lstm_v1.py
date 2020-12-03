@@ -1,6 +1,4 @@
 import numpy as np
-# import scipy.signal
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +8,7 @@ def combined_shape(length, shape=None):
     if shape is None:
         return (length,)
     return (length, shape) if np.isscalar(shape) else (length, *shape)
+
 
 def count_vars(module):
     return sum([np.prod(p.shape) for p in module.parameters()])
@@ -156,6 +155,8 @@ class MLPQFunction(nn.Module):
         self.hx = torch.zeros(1, 64)
         self.cx = torch.zeros(1, 64)
         self.reset_flag = True
+
+
 
 
 class MLPActorCritic(nn.Module):

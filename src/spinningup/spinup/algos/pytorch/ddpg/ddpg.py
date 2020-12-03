@@ -244,7 +244,7 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
     # ac.apply(init_weights)
     ac_targ = deepcopy(ac)
-    # ac.eval()  # in-active training BN
+    ac.eval()  # in-active training BN
     print(f"[MODEL] Actor_Critic: {ac}")
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
@@ -436,8 +436,8 @@ def ddpg(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=1,
                             batch[i][key] = value.cuda()
                 update(data=batch)
                 soft_target_update()
-            # ac.eval()
-            # ac_targ.eval()
+            ac.eval()
+            ac_targ.eval()
             if torch.cuda.is_available():
                 ac.cpu()
                 ac_targ.cpu()
