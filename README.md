@@ -1,6 +1,8 @@
 # CS686 Term Project 
 ## Robust robot navigation against imperfect sensor data
 
+![Example image](https://github.com/HyeongYeolRyu/robust-robot-navigation/blob/master/example.png)
+
 ### Dependencies
 - python3
 - gym_gazebo: [link](https://github.com/erlerobot/gym-gazebo/blob/master/INSTALL.md#ubuntu-1804)
